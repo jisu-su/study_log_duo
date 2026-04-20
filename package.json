@@ -1,0 +1,13 @@
+{
+  "name": "studuo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm -w apps/web run dev",
+    "dev:worker": "npm -w apps/worker run dev",
+    "typecheck": "npm -w apps/web run typecheck && npm -w apps/worker run typecheck"
+  }
+}
+

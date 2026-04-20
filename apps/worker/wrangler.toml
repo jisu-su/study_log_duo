@@ -1,0 +1,19 @@
+name = "duoingsu"
+main = "src/index.ts"
+compatibility_date = "2026-04-20"
+
+[vars]
+FIREBASE_PROJECT_ID = "studuo-fa42b"
+# Do not commit real emails. Override via `wrangler secret put ALLOWED_EMAILS`
+# and/or `apps/worker/.dev.vars` for local dev.
+ALLOWED_EMAILS = "a@gmail.com,b@gmail.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "studuo"
+database_id = "REPLACE_ME"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "studuo-resources"
