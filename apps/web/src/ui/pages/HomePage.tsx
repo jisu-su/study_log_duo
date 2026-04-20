@@ -5,15 +5,41 @@ import { auth, googleProvider, isFirebaseConfigured } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 import Modal from '../shared/Modal'
 
-type TimeLogRow = {
-  user_id: string
-  user_name: string
+type HomeUser = {
+  id: string
+  name: string
   avatar_url: string | null
-  hour: number | null
-  content: string | null
+  email: string
+}
+
+type TimeLog = {
+  user_id: string
+  hour: number
+  content: string
   tag: string | null
   focus_level: number | null
   updated_at: string | null
+}
+
+type DayOff = {
+  user_id: string
+  note: string | null
+}
+
+type Schedule = {
+  id: string
+  user_id: string
+  start_hour: number
+  end_hour: number
+  title: string
+}
+
+type HomePayload = {
+  logicalDate: string
+  users: HomeUser[]
+  timeLogs: TimeLog[]
+  dayOffs: DayOff[]
+  schedules: Schedule[]
 }
 
 function buildTimelineHours(dayStartHour = 6): number[] {
@@ -25,7 +51,10 @@ function buildTimelineHours(dayStartHour = 6): number[] {
 
 export default function HomePage() {
   const [logicalDate] = useState(() => getNowKstLogicalDate(6))
-  const [rows, setRows] = useState<TimeLogRow[]>([])
+  const [users, setUsers] = useState<HomeUser[]>([])
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([])
+  const [dayOffs, setDayOffs] = useState<DayOff[]>([])
+  const [schedules, setSchedules] = useState<Schedule[]>([])
   const [meUid, setMeUid] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,10 +80,13 @@ export default function HomePage() {
     setError(null)
     try {
       await apiFetch<{ user: any }>('/api/me')
-      const data = await apiFetch<{ logicalDate: string; rows: TimeLogRow[] }>(
-        `/api/time-logs?logicalDate=${encodeURIComponent(logicalDate)}`,
+      const data = await apiFetch<HomePayload>(
+        `/api/home?logicalDate=${encodeURIComponent(logicalDate)}`,
       )
-      setRows(data.rows)
+      setUsers(data.users)
+      setTimeLogs(data.timeLogs)
+      setDayOffs(data.dayOffs)
+      setSchedules(data.schedules)
     } catch (e: any) {
       setError(e?.message ?? 'Failed to load')
     } finally {
@@ -69,29 +101,32 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meUid])
 
-  const users = useMemo(() => {
-    const byId = new Map<string, { id: string; name: string; avatar: string | null }>()
-    for (const r of rows) {
-      if (!byId.has(r.user_id)) {
-        byId.set(r.user_id, {
-          id: r.user_id,
-          name: r.user_name,
-          avatar: r.avatar_url,
-        })
-      }
-    }
-    return Array.from(byId.values())
-  }, [rows])
-
   const logsByUserHour = useMemo(() => {
-    const map = new Map<string, Map<number, TimeLogRow>>()
-    for (const r of rows) {
-      if (r.hour == null) continue
+    const map = new Map<string, Map<number, TimeLog>>()
+    for (const r of timeLogs) {
       if (!map.has(r.user_id)) map.set(r.user_id, new Map())
       map.get(r.user_id)!.set(r.hour, r)
     }
     return map
-  }, [rows])
+  }, [timeLogs])
+
+  const dayOffByUser = useMemo(() => {
+    const map = new Map<string, DayOff>()
+    for (const d of dayOffs) map.set(d.user_id, d)
+    return map
+  }, [dayOffs])
+
+  const schedulesByUser = useMemo(() => {
+    const map = new Map<string, Schedule[]>()
+    for (const s of schedules) {
+      if (!map.has(s.user_id)) map.set(s.user_id, [])
+      map.get(s.user_id)!.push(s)
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.start_hour - b.start_hour)
+    }
+    return map
+  }, [schedules])
 
   function openEdit(hour: number) {
     setEditHour(hour)
@@ -175,6 +210,8 @@ export default function HomePage() {
               users={users}
               meUid={meUid}
               logsByUserHour={logsByUserHour}
+              dayOffByUser={dayOffByUser}
+              schedulesByUser={schedulesByUser}
               onEdit={openEdit}
             />
           ))}
@@ -238,19 +275,27 @@ export default function HomePage() {
 
 function Row(props: {
   hour: number
-  users: { id: string; name: string; avatar: string | null }[]
+  users: HomeUser[]
   meUid: string | null
-  logsByUserHour: Map<string, Map<number, TimeLogRow>>
+  logsByUserHour: Map<string, Map<number, TimeLog>>
+  dayOffByUser: Map<string, DayOff>
+  schedulesByUser: Map<string, Schedule[]>
   onEdit: (hour: number) => void
 }) {
-  const { hour, users, meUid, logsByUserHour, onEdit } = props
+  const { hour, users, meUid, logsByUserHour, dayOffByUser, schedulesByUser, onEdit } = props
   return (
     <>
       <div className="cell timeCol">{String(hour).padStart(2, '0')}:00</div>
       {users.map((u) => {
         const r = logsByUserHour.get(u.id)?.get(hour)
+        const isDayOff = dayOffByUser.has(u.id)
+        const schedule = isDayOff
+          ? null
+          : (schedulesByUser.get(u.id) ?? []).find(
+              (s) => s.start_hour <= hour && s.end_hour > hour,
+            ) ?? null
         const isMe = u.id === meUid
-        const clickable = isMe
+        const clickable = isMe && !isDayOff && !schedule
         return (
           <div
             key={`${u.id}-${hour}`}
@@ -261,7 +306,11 @@ function Row(props: {
             role={clickable ? 'button' : undefined}
             tabIndex={clickable ? 0 : -1}
           >
-            {r?.content ? (
+            {isDayOff ? (
+              <div className="badgeOff">휴무</div>
+            ) : schedule ? (
+              <div className="badgeSchedule">📅 {schedule.title}</div>
+            ) : r?.content ? (
               <>
                 <div className="content">{r.content}</div>
                 <div className="meta">

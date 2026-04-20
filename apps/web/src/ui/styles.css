@@ -227,6 +227,32 @@ a {
   background: rgba(110, 231, 255, 0.03);
 }
 
+.badgeOff {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.badgeSchedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(110, 231, 255, 0.25);
+  background: rgba(110, 231, 255, 0.08);
+  color: rgba(220, 252, 255, 0.95);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
 .logCell.clickable {
   cursor: pointer;
 }
