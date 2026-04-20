@@ -1,7 +1,7 @@
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
+import { onAuthStateChanged } from 'firebase/auth'
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api'
-import { auth, googleProvider, isFirebaseConfigured } from '../../firebase'
+import { auth, isFirebaseConfigured } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 import Modal from '../shared/Modal'
 
@@ -49,8 +49,14 @@ function buildTimelineHours(dayStartHour = 6): number[] {
   return hours
 }
 
+function shiftIsoDate(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map((v) => Number(v))
+  const ms = Date.UTC(y, m - 1, d) + days * 24 * 60 * 60_000
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
 export default function HomePage() {
-  const [logicalDate] = useState(() => getNowKstLogicalDate(6))
+  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
   const [users, setUsers] = useState<HomeUser[]>([])
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([])
   const [dayOffs, setDayOffs] = useState<DayOff[]>([])
@@ -64,6 +70,7 @@ export default function HomePage() {
   const [editContent, setEditContent] = useState('')
   const [editTag, setEditTag] = useState<string>('study')
   const [editFocus, setEditFocus] = useState<number>(2)
+  const [editHadLog, setEditHadLog] = useState(false)
 
   const timelineHours = useMemo(() => buildTimelineHours(6), [])
 
@@ -99,7 +106,7 @@ export default function HomePage() {
     const interval = setInterval(refresh, 30_000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meUid])
+  }, [logicalDate, meUid])
 
   const logsByUserHour = useMemo(() => {
     const map = new Map<string, Map<number, TimeLog>>()
@@ -128,12 +135,27 @@ export default function HomePage() {
     return map
   }, [schedules])
 
+  const displayUsers = useMemo(() => {
+    const base = [...users]
+    if (base.length === 0) {
+      return [
+        { id: '__placeholder_a', name: '(A 로그인 대기)', avatar_url: null, email: '' },
+        { id: '__placeholder_b', name: '(B 로그인 대기)', avatar_url: null, email: '' },
+      ]
+    }
+    if (base.length === 1) {
+      base.push({ id: '__placeholder_b', name: '(상대 로그인 대기)', avatar_url: null, email: '' })
+    }
+    return base.slice(0, 2)
+  }, [users])
+
   function openEdit(hour: number) {
     setEditHour(hour)
     const mine = meUid ? logsByUserHour.get(meUid)?.get(hour) : undefined
     setEditContent(mine?.content ?? '')
     setEditTag(mine?.tag ?? 'study')
     setEditFocus(mine?.focus_level ?? 2)
+    setEditHadLog(Boolean(mine?.content))
     setEditOpen(true)
   }
 
@@ -149,6 +171,18 @@ export default function HomePage() {
         focusLevel: editFocus,
       }),
     })
+    setEditOpen(false)
+    await refresh()
+  }
+
+  async function deleteEdit() {
+    if (editHour == null) return
+    await apiFetch(
+      `/api/time-logs?logicalDate=${encodeURIComponent(logicalDate)}&hour=${encodeURIComponent(
+        String(editHour),
+      )}`,
+      { method: 'DELETE' },
+    )
     setEditOpen(false)
     await refresh()
   }
@@ -171,29 +205,50 @@ export default function HomePage() {
             <div className="muted">logical_date: {logicalDate}</div>
           </div>
           <div className="actions">
-            {auth.currentUser ? (
-              <>
-                <button className="btn" onClick={() => refresh()} disabled={loading}>
-                  새로고침
-                </button>
-                <button className="btnSecondary" onClick={() => signOut(auth)}>
-                  로그아웃
-                </button>
-              </>
-            ) : (
-              <button className="btn" onClick={() => signInWithPopup(auth, googleProvider)}>
-                Google로 로그인
-              </button>
-            )}
+            <label className="label" style={{ gap: 4 }}>
+              날짜
+              <input
+                className="textInput"
+                type="date"
+                value={logicalDate}
+                onChange={(e) => setLogicalDate(e.target.value)}
+              />
+            </label>
+            <button
+              className="btnSecondary"
+              onClick={() => setLogicalDate(getNowKstLogicalDate(6))}
+              disabled={loading}
+            >
+              오늘
+            </button>
+            <button className="btnSecondary" onClick={() => setLogicalDate(shiftIsoDate(logicalDate, -1))}>
+              ◀
+            </button>
+            <button className="btnSecondary" onClick={() => setLogicalDate(shiftIsoDate(logicalDate, 1))}>
+              ▶
+            </button>
+            <button className="btn" onClick={() => refresh()} disabled={loading || !auth.currentUser}>
+              {loading ? '불러오는 중…' : '새로고침'}
+            </button>
           </div>
         </div>
         {error ? <div className="error">{error}</div> : null}
+        {!auth.currentUser ? (
+          <div className="muted" style={{ marginTop: 8 }}>
+            상단의 Google 로그인 후 사용 가능해.
+          </div>
+        ) : null}
+        {users.length < 2 && auth.currentUser ? (
+          <div className="muted" style={{ marginTop: 8 }}>
+            상대가 아직 로그인 전이야. 두 사람 모두 한 번씩 로그인하면 홈이 2열로 완성돼.
+          </div>
+        ) : null}
       </div>
 
       <div className="timeline card">
         <div className="grid">
           <div className="cell head timeCol">시간</div>
-          {users.map((u) => (
+          {displayUsers.map((u) => (
             <div key={u.id} className="cell head">
               <div className="userHead">
                 <div className="avatar">{u.name.slice(0, 1)}</div>
@@ -207,7 +262,7 @@ export default function HomePage() {
             <Row
               key={h}
               hour={h}
-              users={users}
+              users={displayUsers}
               meUid={meUid}
               logsByUserHour={logsByUserHour}
               dayOffByUser={dayOffByUser}
@@ -260,6 +315,11 @@ export default function HomePage() {
           </div>
 
           <div className="modalActions">
+            {editHadLog ? (
+              <button className="btnSecondary" onClick={deleteEdit}>
+                삭제
+              </button>
+            ) : null}
             <button className="btnSecondary" onClick={() => setEditOpen(false)}>
               취소
             </button>
@@ -287,15 +347,16 @@ function Row(props: {
     <>
       <div className="cell timeCol">{String(hour).padStart(2, '0')}:00</div>
       {users.map((u) => {
+        const isPlaceholder = u.id.startsWith('__placeholder_')
         const r = logsByUserHour.get(u.id)?.get(hour)
         const isDayOff = dayOffByUser.has(u.id)
-        const schedule = isDayOff
+        const schedule = isDayOff || isPlaceholder
           ? null
           : (schedulesByUser.get(u.id) ?? []).find(
               (s) => s.start_hour <= hour && s.end_hour > hour,
             ) ?? null
         const isMe = u.id === meUid
-        const clickable = isMe && !isDayOff && !schedule
+        const clickable = isMe && !isDayOff && !schedule && !isPlaceholder
         return (
           <div
             key={`${u.id}-${hour}`}
@@ -307,9 +368,11 @@ function Row(props: {
             tabIndex={clickable ? 0 : -1}
           >
             {isDayOff ? (
-              <div className="badgeOff">휴무</div>
+              <div className="badgeOff">휴무{dayOffByUser.get(u.id)?.note ? ` · ${dayOffByUser.get(u.id)!.note}` : ''}</div>
             ) : schedule ? (
-              <div className="badgeSchedule">📅 {schedule.title}</div>
+              <div className="badgeSchedule">
+                📅 {schedule.title} · {schedule.start_hour}:00~{schedule.end_hour}:00
+              </div>
             ) : r?.content ? (
               <>
                 <div className="content">{r.content}</div>
