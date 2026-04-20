@@ -15,17 +15,15 @@ export async function ensureUser(env: Env, token: FirebaseToken) {
      VALUES (?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        email = excluded.email,
-       name = excluded.name,
        avatar_url = excluded.avatar_url`,
   )
     .bind(token.uid, token.email, name, token.picture ?? null)
     .run()
 
   return env.DB.prepare(
-    `SELECT id, email, name, avatar_url, day_start_hour
+    `SELECT id, email, name, avatar_url, day_start_hour, name_locked
      FROM users WHERE id = ?`,
   )
     .bind(token.uid)
     .first()
 }
-

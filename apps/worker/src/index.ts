@@ -60,6 +60,54 @@ app.get('/api/me', async (c) => {
   return c.json({ user })
 })
 
+app.post('/api/me/nickname', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+
+  const body = (await c.req.json().catch(() => null)) as any
+  const nickname = String(body?.nickname ?? '').trim()
+
+  // Rule: set once, 2~12 chars, and only Korean/English/numbers.
+  if (nickname.length < 2 || nickname.length > 12) {
+    return c.json({ error: 'Nickname must be 2~12 characters.' }, 400)
+  }
+  if (/[\r\n\t]/.test(nickname)) {
+    return c.json({ error: 'Nickname contains invalid characters.' }, 400)
+  }
+  if (!/^[0-9A-Za-z\u3131-\u318E\uAC00-\uD7A3]+$/.test(nickname)) {
+    return c.json({ error: 'Nickname may contain only Korean/English letters and numbers.' }, 400)
+  }
+
+  // Ensure user row exists before trying to lock nickname.
+  await ensureUser(c.env, {
+    uid: String(token.uid),
+    email: String(token.email),
+    name: (token as any).name ? String((token as any).name) : undefined,
+    picture: token.picture ? String(token.picture) : undefined,
+  })
+
+  const res = await c.env.DB.prepare(
+    `UPDATE users
+     SET name = ?, name_locked = 1
+     WHERE id = ? AND (name_locked IS NULL OR name_locked = 0)`,
+  )
+    .bind(nickname, String(token.uid))
+    .run()
+
+  if ((res.meta?.changes ?? 0) === 0) {
+    return c.json({ error: 'Nickname already set.' }, 409)
+  }
+
+  const user = await c.env.DB.prepare(
+    `SELECT id, email, name, avatar_url, day_start_hour, name_locked
+     FROM users WHERE id = ?`,
+  )
+    .bind(String(token.uid))
+    .first()
+
+  return c.json({ user })
+})
+
 app.get('/api/time-logs', async (c) => {
   const logicalDate = c.req.query('logicalDate')
   if (!logicalDate) return c.json({ error: 'logicalDate is required' }, 400)

@@ -19,3 +19,12 @@ export async function apiFetch<T>(
   return (await res.json()) as T
 }
 
+export type MeUser = {
+  id: string
+  email: string
+  name: string
+  avatar_url: string | null
+  day_start_hour: number
+  name_locked?: number | null
+}
+
