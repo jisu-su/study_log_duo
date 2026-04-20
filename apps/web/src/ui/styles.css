@@ -404,3 +404,24 @@ input.textInput {
   color: rgba(110, 231, 255, 0.9);
   font-size: 12px;
 }
+
+.list {
+  display: grid;
+  gap: 10px;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+}
+
+.listMain {
+  display: grid;
+  gap: 4px;
+}
