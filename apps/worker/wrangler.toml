@@ -7,6 +7,8 @@ FIREBASE_PROJECT_ID = "studuo-fa42b"
 # Do not commit real emails. Override via `wrangler secret put ALLOWED_EMAILS`
 # and/or `apps/worker/.dev.vars` for local dev.
 ALLOWED_EMAILS = "a@gmail.com,b@gmail.com"
+# For production, set this to your Pages origin (e.g. https://duoingsu.pages.dev).
+CORS_ORIGIN = "https://duoingsu.pages.dev"
 
 [[d1_databases]]
 binding = "DB"

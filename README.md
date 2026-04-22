@@ -14,6 +14,8 @@ Do NOT commit real emails or secrets.
 
 - `ALLOWED_EMAILS`: set via Cloudflare secret or local dev vars
   - Example placeholder: `a@gmail.com,b@gmail.com`
+- `CORS_ORIGIN` (Worker var): set to your Pages origin
+  - Example: `https://duoingsu.pages.dev`
 - Firebase project id (not secret): `studuo-fa42b`
 
 ## Local Dev

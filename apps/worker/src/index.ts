@@ -13,11 +13,17 @@ app.use(
   cors({
     origin: (origin, c) => {
       const configured = c.env.CORS_ORIGIN?.trim()
-      if (configured) return configured
-      if (!origin) return '*'
+      if (!origin) return configured || '*'
+
+      // Always allow local dev.
       if (origin === 'http://localhost:5173') return origin
       if (origin === 'http://127.0.0.1:5173') return origin
-      return origin
+
+      // In production, lock down to the single configured Pages origin.
+      if (configured) return origin === configured ? origin : ''
+
+      // If not configured, fall back to allowing same-origin callers only.
+      return ''
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
