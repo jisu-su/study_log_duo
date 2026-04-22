@@ -58,7 +58,7 @@ export default function App() {
   return (
     <div className="layout">
       <header className="topbar">
-        <div className="brand">studuo</div>
+        <div className="brand">duoingsu</div>
         <nav className="nav">
           <NavLink to="/" end>
             홈

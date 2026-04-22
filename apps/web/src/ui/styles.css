@@ -24,10 +24,7 @@ body {
   margin: 0;
   font-family: var(--sans);
   color: var(--text);
-  background: radial-gradient(900px 600px at 12% 18%, rgba(14, 165, 164, 0.16), transparent 55%),
-    radial-gradient(900px 600px at 88% 10%, rgba(255, 122, 89, 0.12), transparent 55%),
-    radial-gradient(900px 600px at 75% 92%, rgba(14, 165, 164, 0.08), transparent 55%),
-    var(--bg);
+  background: var(--bg);
 }
 
 a {
@@ -92,7 +89,7 @@ a {
 }
 
 .card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78));
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -138,7 +135,7 @@ a {
 }
 
 .btn {
-  background: linear-gradient(135deg, rgba(14, 165, 164, 0.95), rgba(255, 122, 89, 0.95));
+  background: var(--accent);
   color: rgba(255, 255, 255, 0.95);
 }
 
@@ -155,7 +152,7 @@ a {
 
 .timeline {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .grid {
@@ -608,6 +605,18 @@ span.chip {
   background: rgba(255, 255, 255, 0.72);
   display: flex;
   align-items: center;
+}
+
+.fishCell.fishLeft {
+  justify-content: flex-end;
+}
+
+.fishCell.fishMid {
+  justify-content: center;
+}
+
+.fishCell.fishRight {
+  justify-content: flex-start;
 }
 
 .fishCell.clickable {
