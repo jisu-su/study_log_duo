@@ -702,4 +702,316 @@ app.put('/api/reactions', async (c) => {
   return c.json({ ok: true })
 })
 
+function parseTags(input: any): string | null {
+  if (input == null) return null
+  if (Array.isArray(input)) {
+    const tags = input
+      .filter((t) => typeof t === 'string')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 10)
+    return tags.length ? JSON.stringify(tags) : null
+  }
+  if (typeof input === 'string') {
+    const tags = input
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 10)
+    return tags.length ? JSON.stringify(tags) : null
+  }
+  return null
+}
+
+function extractOg(html: string): { title?: string; ogImage?: string } {
+  const pick = (re: RegExp): string | undefined => {
+    const m = html.match(re)
+    const v = m?.[1]?.trim()
+    return v || undefined
+  }
+
+  const ogTitle =
+    pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i) ||
+    pick(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["'][^>]*>/i)
+
+  const ogImage =
+    pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i) ||
+    pick(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i)
+
+  const titleTag = pick(/<title[^>]*>([^<]{1,200})<\/title>/i)
+  return { title: ogTitle || titleTag, ogImage }
+}
+
+app.get('/api/resources', async (c) => {
+  const type = c.req.query('type')
+  const q = (c.req.query('q') ?? '').trim()
+  const date = c.req.query('date') // YYYY-MM-DD (created_at based)
+
+  const where: string[] = []
+  const args: any[] = []
+
+  if (type) {
+    where.push('r.type = ?')
+    args.push(type)
+  }
+
+  if (date) {
+    where.push(`date(r.created_at) = ?`)
+    args.push(date)
+  }
+
+  if (q) {
+    where.push(`(r.title LIKE ? OR r.memo LIKE ? OR r.url LIKE ?)`)
+    args.push(`%${q}%`, `%${q}%`, `%${q}%`)
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+  const stmt = c.env.DB.prepare(
+    `SELECT r.id, r.user_id, u.name AS user_name, u.avatar_url AS avatar_url,
+            r.type, r.title, r.url, r.memo, r.tags, r.is_pinned, r.og_image, r.created_at
+     FROM resources r
+     JOIN users u ON u.id = r.user_id
+     ${whereSql}
+     ORDER BY r.is_pinned DESC, r.created_at DESC
+     LIMIT 100`,
+  )
+
+  const rows = (await (stmt as any).bind(...args).all()).results
+  return c.json({ rows })
+})
+
+app.post('/api/resources', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+
+  const contentType = c.req.header('content-type') || ''
+  const userId = String(token.uid)
+
+  await ensureUser(c.env, {
+    uid: userId,
+    email: String(token.email),
+    name: (token as any).name ? String((token as any).name) : undefined,
+    picture: token.picture ? String(token.picture) : undefined,
+  })
+
+  if (contentType.includes('multipart/form-data')) {
+    const form = await c.req.formData()
+    const file = form.get('file')
+    if (!(file instanceof File)) {
+      return c.json({ error: 'file is required' }, 400)
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      return c.json({ error: 'File too large (max 10MB)' }, 400)
+    }
+
+    const title = String(form.get('title') ?? file.name).trim()
+    const memo = form.get('memo') != null ? String(form.get('memo')).trim() : null
+    const tags = parseTags(form.get('tags'))
+    if (!title || title.length > 80) return c.json({ error: 'Invalid title' }, 400)
+    if (memo != null && memo.length > 800) return c.json({ error: 'Memo too long' }, 400)
+
+    const id = crypto.randomUUID()
+    const safeName = file.name.replace(/[^\w.\-() ]+/g, '_').slice(0, 100) || 'file'
+    const key = `${userId}/${id}/${safeName}`
+
+    const buf = await file.arrayBuffer()
+    await c.env.R2.put(key, buf, {
+      httpMetadata: {
+        contentType: file.type || 'application/octet-stream',
+      },
+    })
+
+    await c.env.DB.prepare(
+      `INSERT INTO resources (id, user_id, type, title, url, memo, tags)
+       VALUES (?, ?, 'file', ?, ?, ?, ?)`,
+    )
+      .bind(id, userId, title, key, memo, tags)
+      .run()
+
+    const row = await c.env.DB.prepare(
+      `SELECT r.id, r.user_id, u.name AS user_name, u.avatar_url AS avatar_url,
+              r.type, r.title, r.url, r.memo, r.tags, r.is_pinned, r.og_image, r.created_at
+       FROM resources r JOIN users u ON u.id = r.user_id
+       WHERE r.id = ?`,
+    )
+      .bind(id)
+      .first()
+
+    return c.json({ row })
+  }
+
+  const body = (await c.req.json().catch(() => null)) as any
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400)
+
+  const type = String(body.type ?? '').trim()
+  if (!['link', 'memo'].includes(type)) return c.json({ error: 'Invalid type' }, 400)
+
+  const title = String(body.title ?? '').trim()
+  const url = body.url != null ? String(body.url).trim() : null
+  const memo = body.memo != null ? String(body.memo).trim() : null
+  const tags = parseTags(body.tags)
+
+  if (title.length > 80) return c.json({ error: 'Title too long' }, 400)
+  if (memo != null && memo.length > 800) return c.json({ error: 'Memo too long' }, 400)
+
+  if (type === 'link') {
+    if (!url) return c.json({ error: 'url is required for link' }, 400)
+    if (!/^https?:\/\//i.test(url)) return c.json({ error: 'url must start with http(s)://' }, 400)
+
+    const dup = await c.env.DB.prepare(
+      `SELECT id, user_id FROM resources WHERE type = 'link' AND url = ? LIMIT 1`,
+    )
+      .bind(url)
+      .first()
+    if (dup) return c.json({ error: 'URL already shared', id: (dup as any).id }, 409)
+  }
+
+  const id = crypto.randomUUID()
+
+  let finalTitle = title
+  let ogImage: string | null = null
+
+  if (type === 'link' && url) {
+    if (!finalTitle) finalTitle = url
+
+    try {
+      const controller = new AbortController()
+      const t = setTimeout(() => controller.abort(), 5000)
+      const res = await fetch(url, { signal: controller.signal, redirect: 'follow' })
+      clearTimeout(t)
+      const ct = res.headers.get('content-type') || ''
+      if (res.ok && ct.includes('text/html')) {
+        const html = await res.text()
+        const og = extractOg(html)
+        if (!title && og.title) finalTitle = og.title.slice(0, 80)
+        if (og.ogImage) ogImage = og.ogImage.slice(0, 500)
+      }
+    } catch {
+      // best-effort only
+    }
+  }
+
+  if (!finalTitle || finalTitle.length < 1) return c.json({ error: 'title is required' }, 400)
+
+  await c.env.DB.prepare(
+    `INSERT INTO resources (id, user_id, type, title, url, memo, tags, og_image)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(id, userId, type, finalTitle, url, memo, tags, ogImage)
+    .run()
+
+  const row = await c.env.DB.prepare(
+    `SELECT r.id, r.user_id, u.name AS user_name, u.avatar_url AS avatar_url,
+            r.type, r.title, r.url, r.memo, r.tags, r.is_pinned, r.og_image, r.created_at
+     FROM resources r JOIN users u ON u.id = r.user_id
+     WHERE r.id = ?`,
+  )
+    .bind(id)
+    .first()
+
+  return c.json({ row })
+})
+
+app.patch('/api/resources/:id', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  const id = c.req.param('id')
+
+  const body = (await c.req.json().catch(() => null)) as any
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400)
+
+  const row = await c.env.DB.prepare(
+    `SELECT id, user_id, type FROM resources WHERE id = ?`,
+  )
+    .bind(id)
+    .first()
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  if ((row as any).user_id !== String(token.uid)) return c.json({ error: 'Forbidden' }, 403)
+
+  const title = body.title != null ? String(body.title).trim() : null
+  const memo = body.memo != null ? String(body.memo).trim() : null
+  const tags = body.tags !== undefined ? parseTags(body.tags) : undefined
+  const isPinned = body.isPinned != null ? Number(body.isPinned) : null
+
+  if (title != null && (!title || title.length > 80)) return c.json({ error: 'Invalid title' }, 400)
+  if (memo != null && memo.length > 800) return c.json({ error: 'Memo too long' }, 400)
+  if (isPinned != null && (isPinned !== 0 && isPinned !== 1)) return c.json({ error: 'Invalid isPinned' }, 400)
+
+  const set: string[] = []
+  const args: any[] = []
+  if (title != null) {
+    set.push('title = ?')
+    args.push(title)
+  }
+  if (memo != null) {
+    set.push('memo = ?')
+    args.push(memo)
+  }
+  if (tags !== undefined) {
+    set.push('tags = ?')
+    args.push(tags)
+  }
+  if (isPinned != null) {
+    set.push('is_pinned = ?')
+    args.push(isPinned)
+  }
+
+  if (set.length === 0) return c.json({ error: 'No changes' }, 400)
+
+  args.push(id)
+  await c.env.DB.prepare(
+    `UPDATE resources SET ${set.join(', ')} WHERE id = ?`,
+  )
+    .bind(...args)
+    .run()
+
+  return c.json({ ok: true })
+})
+
+app.delete('/api/resources/:id', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  const id = c.req.param('id')
+
+  const row = await c.env.DB.prepare(
+    `SELECT id, user_id, type, url FROM resources WHERE id = ?`,
+  )
+    .bind(id)
+    .first()
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  if ((row as any).user_id !== String(token.uid)) return c.json({ error: 'Forbidden' }, 403)
+
+  if ((row as any).type === 'file' && (row as any).url) {
+    await c.env.R2.delete(String((row as any).url))
+  }
+
+  await c.env.DB.prepare(`DELETE FROM resources WHERE id = ?`).bind(id).run()
+  return c.json({ ok: true })
+})
+
+app.get('/api/resources/:id/file', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  const id = c.req.param('id')
+
+  const row = await c.env.DB.prepare(
+    `SELECT type, title, url FROM resources WHERE id = ?`,
+  )
+    .bind(id)
+    .first()
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  if ((row as any).type !== 'file') return c.json({ error: 'Not a file resource' }, 400)
+
+  const key = String((row as any).url)
+  const obj = await c.env.R2.get(key)
+  if (!obj) return c.json({ error: 'File missing' }, 404)
+
+  const headers = new Headers()
+  obj.writeHttpMetadata(headers)
+  headers.set('etag', obj.httpEtag)
+  headers.set('content-disposition', `attachment; filename="${String((row as any).title).replace(/"/g, '')}"`)
+  return new Response(obj.body, { headers })
+})
+
 export default app
