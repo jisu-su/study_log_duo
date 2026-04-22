@@ -556,4 +556,150 @@ app.delete('/api/plan-items', async (c) => {
   return c.json({ ok: true })
 })
 
+app.get('/api/reflections', async (c) => {
+  const logicalDate = c.req.query('logicalDate')
+  if (!logicalDate) return c.json({ error: 'logicalDate is required' }, 400)
+
+  const reflections = await c.env.DB.prepare(
+    `SELECT u.id AS user_id, u.name AS user_name, u.avatar_url AS avatar_url,
+            r.id AS reflection_id,
+            r.emotion_tags AS emotion_tags,
+            r.went_well AS went_well,
+            r.went_wrong AS went_wrong,
+            r.memo AS memo,
+            r.updated_at AS updated_at
+     FROM users u
+     LEFT JOIN reflections r
+       ON r.user_id = u.id AND r.logical_date = ?
+     ORDER BY u.email ASC`,
+  )
+    .bind(logicalDate)
+    .all()
+
+  const reflectionIds = reflections.results
+    .map((r: any) => r.reflection_id as string | null)
+    .filter((id: string | null): id is string => Boolean(id))
+
+  let reactions: any[] = []
+  if (reflectionIds.length > 0) {
+    const placeholders = reflectionIds.map(() => '?').join(',')
+    const stmt = c.env.DB.prepare(
+      `SELECT reflection_id, user_id, emoji, created_at
+       FROM reactions
+       WHERE reflection_id IN (${placeholders})`,
+    )
+    reactions = (await (stmt as any).bind(...reflectionIds).all()).results
+  }
+
+  return c.json({ logicalDate, reflections: reflections.results, reactions })
+})
+
+app.put('/api/reflections', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  const body = (await c.req.json().catch(() => null)) as any
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400)
+
+  const logicalDate = String(body.logicalDate ?? '')
+  const emotionTags = Array.isArray(body.emotionTags) ? body.emotionTags : null
+  const wentWell = body.wentWell != null ? String(body.wentWell).trim() : null
+  const wentWrong = body.wentWrong != null ? String(body.wentWrong).trim() : null
+  const memo = body.memo != null ? String(body.memo) : null
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(logicalDate)) {
+    return c.json({ error: 'Invalid logicalDate' }, 400)
+  }
+  if (wentWell != null && wentWell.length > 800) return c.json({ error: 'wentWell too long' }, 400)
+  if (wentWrong != null && wentWrong.length > 800) return c.json({ error: 'wentWrong too long' }, 400)
+  if (memo != null && memo.length > 10_000) return c.json({ error: 'memo too long' }, 400)
+  if (emotionTags != null) {
+    if (emotionTags.length > 12) return c.json({ error: 'Too many emotion tags' }, 400)
+    for (const t of emotionTags) {
+      if (typeof t !== 'string' || t.length < 1 || t.length > 20) {
+        return c.json({ error: 'Invalid emotion tag' }, 400)
+      }
+    }
+  }
+
+  await ensureUser(c.env, {
+    uid: String(token.uid),
+    email: String(token.email),
+    name: (token as any).name ? String((token as any).name) : undefined,
+    picture: token.picture ? String(token.picture) : undefined,
+  })
+
+  const id = crypto.randomUUID()
+  const nowIso = new Date().toISOString()
+
+  await c.env.DB.prepare(
+    `INSERT INTO reflections (id, user_id, logical_date, emotion_tags, went_well, went_wrong, memo, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, logical_date) DO UPDATE SET
+       emotion_tags = excluded.emotion_tags,
+       went_well = excluded.went_well,
+       went_wrong = excluded.went_wrong,
+       memo = excluded.memo,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(
+      id,
+      String(token.uid),
+      logicalDate,
+      emotionTags ? JSON.stringify(emotionTags) : null,
+      wentWell,
+      wentWrong,
+      memo,
+      nowIso,
+    )
+    .run()
+
+  const row = await c.env.DB.prepare(
+    `SELECT id AS reflection_id
+     FROM reflections
+     WHERE user_id = ? AND logical_date = ?`,
+  )
+    .bind(String(token.uid), logicalDate)
+    .first()
+
+  return c.json({ ok: true, reflectionId: (row as any)?.reflection_id ?? null })
+})
+
+app.put('/api/reactions', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  const body = (await c.req.json().catch(() => null)) as any
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400)
+
+  const reflectionId = String(body.reflectionId ?? '')
+  const emoji = String(body.emoji ?? '')
+  const allowed = new Set(['👍', '💪', '❤️'])
+  if (!reflectionId) return c.json({ error: 'reflectionId is required' }, 400)
+  if (!allowed.has(emoji)) return c.json({ error: 'Invalid emoji' }, 400)
+
+  const exists = await c.env.DB.prepare(
+    `SELECT id FROM reflections WHERE id = ?`,
+  )
+    .bind(reflectionId)
+    .first()
+  if (!exists) return c.json({ error: 'Reflection not found' }, 404)
+
+  await ensureUser(c.env, {
+    uid: String(token.uid),
+    email: String(token.email),
+    name: (token as any).name ? String((token as any).name) : undefined,
+    picture: token.picture ? String(token.picture) : undefined,
+  })
+
+  await c.env.DB.prepare(
+    `INSERT INTO reactions (id, reflection_id, user_id, emoji)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(reflection_id, user_id) DO UPDATE SET
+       emoji = excluded.emoji`,
+  )
+    .bind(crypto.randomUUID(), reflectionId, String(token.uid), emoji)
+    .run()
+
+  return c.json({ ok: true })
+})
+
 export default app

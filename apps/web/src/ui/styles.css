@@ -425,3 +425,107 @@ input.textInput {
   display: grid;
   gap: 4px;
 }
+
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.sectionTitle {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.62);
+  letter-spacing: 0.02em;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 17, 17, 0.14);
+  background: rgba(255, 255, 255, 0.8);
+  color: rgba(17, 17, 17, 0.82);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.chip.on {
+  border-color: rgba(14, 165, 164, 0.28);
+  background: rgba(14, 165, 164, 0.12);
+  color: rgba(10, 91, 90, 0.96);
+}
+
+span.chip {
+  cursor: default;
+}
+
+.box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  white-space: pre-wrap;
+}
+
+.boxRow {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(17, 17, 17, 0.08);
+}
+
+.boxRow:last-child {
+  border-bottom: none;
+}
+
+.boxKey {
+  font-family: var(--mono);
+  color: rgba(17, 17, 17, 0.6);
+  font-size: 12px;
+}
+
+.boxVal {
+  color: rgba(17, 17, 17, 0.9);
+}
+
+.reactions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.reactBtn {
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 17, 17, 0.14);
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.reactBtn.on {
+  border-color: rgba(14, 165, 164, 0.28);
+  background: rgba(14, 165, 164, 0.12);
+  color: rgba(10, 91, 90, 0.96);
+}
+
+@media (max-width: 980px) {
+  .twoCol {
+    grid-template-columns: 1fr;
+  }
+}
