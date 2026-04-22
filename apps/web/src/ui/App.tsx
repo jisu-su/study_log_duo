@@ -6,7 +6,7 @@ import PlanPage from './pages/PlanPage'
 import ReflectionPage from './pages/ReflectionPage'
 import ResourcesPage from './pages/ResourcesPage'
 import SettingsPage from './pages/SettingsPage'
-import { apiFetch, type MeUser } from '../api'
+import { apiFetch, getApiBaseUrl, type MeUser } from '../api'
 import { auth, googleProvider, isFirebaseConfigured } from '../firebase'
 import Modal from './shared/Modal'
 
@@ -90,6 +90,15 @@ export default function App() {
       </header>
 
       <main className="main">
+        {!getApiBaseUrl() ? (
+          <div className="card">
+            <h2>설정 필요</h2>
+            <p className="muted">
+              Pages 환경변수 `VITE_API_BASE_URL`이 비어있어서 API 호출이 Pages로 가고,
+              결과가 `Not Implemented`로 보일 수 있어.
+            </p>
+          </div>
+        ) : null}
         {!isFirebaseConfigured() ? (
           <div className="card">
             <h2>설정 필요</h2>

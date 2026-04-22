@@ -20,6 +20,15 @@ export async function apiFetch<T>(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<T> {
+  if (import.meta.env.PROD && typeof input === 'string' && input.startsWith('/api/')) {
+    const base = getApiBaseUrl()
+    if (!base) {
+      throw new Error(
+        'Missing VITE_API_BASE_URL in Pages env vars. Without it, /api/* calls hit Pages and return Not Implemented.',
+      )
+    }
+  }
+
   const user = auth?.currentUser ?? null
   const token = user ? await user.getIdToken() : null
 
