@@ -246,21 +246,17 @@ export default function HomePage() {
         ) : null}
       </div>
 
-      <div className="timeline card">
-        <div className="grid">
-          <div className="cell head timeCol">시간</div>
-          {displayUsers.map((u) => (
-            <div key={u.id} className="cell head">
-              <div className="userHead">
-                <div className="avatar">{u.name.slice(0, 1)}</div>
-                <div className="name">{u.name}</div>
-                {u.id === meUid ? <div className="me">ME</div> : null}
-              </div>
-            </div>
-          ))}
+      <div className="card">
+        <h3>타임라인(생선가시)</h3>
+        <div className="muted">내 칸만 클릭해서 로그를 입력할 수 있어.</div>
+
+        <div className="fishGrid" style={{ marginTop: 12 }}>
+          <div className="fishHead fishLeft">{displayUsers[0]?.id === meUid ? '나' : displayUsers[0]?.name ?? '나'}</div>
+          <div className="fishHead fishMid">시간</div>
+          <div className="fishHead fishRight">{displayUsers[1]?.id && displayUsers[1]?.id === meUid ? '나' : displayUsers[1]?.name ?? '동기'}</div>
 
           {timelineHours.map((h) => (
-            <Row
+            <HomeFishRow
               key={h}
               hour={h}
               users={displayUsers}
@@ -334,7 +330,7 @@ export default function HomePage() {
   )
 }
 
-function Row(props: {
+function HomeFishRow(props: {
   hour: number
   users: HomeUser[]
   meUid: string | null
@@ -344,50 +340,52 @@ function Row(props: {
   onEdit: (hour: number) => void
 }) {
   const { hour, users, meUid, logsByUserHour, dayOffByUser, schedulesByUser, onEdit } = props
+
+  const left = users[0]
+  const right = users[1]
+
+  function cell(uid: string, side: 'left' | 'right') {
+    const isPlaceholder = uid.startsWith('__placeholder_')
+    const r = logsByUserHour.get(uid)?.get(hour)
+    const isDayOff = dayOffByUser.has(uid)
+    const schedule =
+      isDayOff || isPlaceholder
+        ? null
+        : (schedulesByUser.get(uid) ?? []).find((s) => s.start_hour <= hour && s.end_hour > hour) ?? null
+    const isMe = uid === meUid
+    const clickable = isMe && !isDayOff && !schedule && !isPlaceholder
+
+    const className = `fishCell ${side === 'left' ? 'fishLeft' : 'fishRight'} ${clickable ? 'clickable' : ''}`
+    return (
+      <div
+        key={`${uid}-${hour}`}
+        className={className}
+        onClick={() => (clickable ? onEdit(hour) : null)}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : -1}
+      >
+        {isDayOff ? (
+          <span className="badgeOff">
+            휴무{dayOffByUser.get(uid)?.note ? ` · ${dayOffByUser.get(uid)!.note}` : ''}
+          </span>
+        ) : schedule ? (
+          <span className="badgeSchedule">📅 {schedule.title}</span>
+        ) : r?.content ? (
+          <span className="content">{r.content}</span>
+        ) : (
+          <span className="muted">{isMe ? '클릭해서 입력' : ''}</span>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
-      <div className="cell timeCol">{String(hour).padStart(2, '0')}:00</div>
-      {users.map((u) => {
-        const isPlaceholder = u.id.startsWith('__placeholder_')
-        const r = logsByUserHour.get(u.id)?.get(hour)
-        const isDayOff = dayOffByUser.has(u.id)
-        const schedule = isDayOff || isPlaceholder
-          ? null
-          : (schedulesByUser.get(u.id) ?? []).find(
-              (s) => s.start_hour <= hour && s.end_hour > hour,
-            ) ?? null
-        const isMe = u.id === meUid
-        const clickable = isMe && !isDayOff && !schedule && !isPlaceholder
-        return (
-          <div
-            key={`${u.id}-${hour}`}
-            className={`cell logCell ${r?.content ? 'has' : 'empty'} ${
-              clickable ? 'clickable' : ''
-            }`}
-            onClick={() => (clickable ? onEdit(hour) : null)}
-            role={clickable ? 'button' : undefined}
-            tabIndex={clickable ? 0 : -1}
-          >
-            {isDayOff ? (
-              <div className="badgeOff">휴무{dayOffByUser.get(u.id)?.note ? ` · ${dayOffByUser.get(u.id)!.note}` : ''}</div>
-            ) : schedule ? (
-              <div className="badgeSchedule">
-                📅 {schedule.title} · {schedule.start_hour}:00~{schedule.end_hour}:00
-              </div>
-            ) : r?.content ? (
-              <>
-                <div className="content">{r.content}</div>
-                <div className="meta">
-                  <span className="pill">{r.tag ?? 'study'}</span>
-                  <span className="pill">focus {r.focus_level ?? 2}</span>
-                </div>
-              </>
-            ) : (
-              <div className="muted">{isMe ? '클릭해서 입력' : ''}</div>
-            )}
-          </div>
-        )
-      })}
+      {left ? cell(left.id, 'left') : <div className="fishCell fishLeft" />}
+      <div className="fishCell fishMid">
+        <span className="timeCol">{String(hour).padStart(2, '0')}:00</span>
+      </div>
+      {right ? cell(right.id, 'right') : <div className="fishCell fishRight" />}
     </>
   )
 }

@@ -31,15 +31,20 @@ app.use(
   }),
 )
 
+// Handle CORS preflight before any auth middleware.
+app.options('/api/*', (c) => c.body(null, 204))
+
 app.get('/api/health', (c) => c.json({ ok: true, service: 'duoingsu' }))
 
 app.use('/api/*', (c, next) => {
   if (c.req.path === '/api/health') return next()
+  if (c.req.method === 'OPTIONS') return next()
   return verifyFirebaseAuth({ projectId: c.env.FIREBASE_PROJECT_ID })(c, next)
 })
 
 app.use('/api/*', async (c, next) => {
   if (c.req.path === '/api/health') return next()
+  if (c.req.method === 'OPTIONS') return next()
 
   const token = getFirebaseToken(c)
   const allowed = c.env.ALLOWED_EMAILS.split(',')
