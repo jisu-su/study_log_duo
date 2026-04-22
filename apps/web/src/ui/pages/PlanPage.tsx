@@ -34,7 +34,7 @@ export default function PlanPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const myUid = auth.currentUser?.uid ?? null
+  const myUid = auth?.currentUser?.uid ?? null
   const myPlan = useMemo(
     () => (myUid ? plans.find((p) => p.user_id === myUid) : null),
     [plans, myUid],
@@ -60,7 +60,7 @@ export default function PlanPage() {
   }, [myPlan?.updated_at])
 
   async function refresh() {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -86,7 +86,7 @@ export default function PlanPage() {
   }, [logicalDate, myUid])
 
   async function saveMyPlan() {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -108,7 +108,7 @@ export default function PlanPage() {
   }
 
   async function saveMyItem() {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -197,7 +197,7 @@ export default function PlanPage() {
         </label>
 
         <div className="modalActions" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
-          <button className="btn" onClick={saveMyPlan} disabled={loading || !auth.currentUser}>
+          <button className="btn" onClick={saveMyPlan} disabled={loading || !auth?.currentUser}>
             저장
           </button>
         </div>
@@ -229,11 +229,11 @@ export default function PlanPage() {
           </label>
         </div>
         <div className="modalActions" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
-          <button
-            className="btn"
-            onClick={saveMyItem}
-            disabled={loading || editContent.trim().length === 0}
-          >
+            <button
+              className="btn"
+              onClick={saveMyItem}
+              disabled={loading || editContent.trim().length === 0}
+            >
             추가/수정
           </button>
         </div>

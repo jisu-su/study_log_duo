@@ -76,13 +76,14 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return
+    if (!auth) return
     return onAuthStateChanged(auth, (user) => {
       setMeUid(user?.uid ?? null)
     })
   }, [])
 
   async function refresh() {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -227,18 +228,18 @@ export default function HomePage() {
             <button className="btnSecondary" onClick={() => setLogicalDate(shiftIsoDate(logicalDate, 1))}>
               ▶
             </button>
-            <button className="btn" onClick={() => refresh()} disabled={loading || !auth.currentUser}>
+            <button className="btn" onClick={() => refresh()} disabled={loading || !auth?.currentUser}>
               {loading ? '불러오는 중…' : '새로고침'}
             </button>
           </div>
         </div>
         {error ? <div className="error">{error}</div> : null}
-        {!auth.currentUser ? (
+        {!auth?.currentUser ? (
           <div className="muted" style={{ marginTop: 8 }}>
             상단의 Google 로그인 후 사용 가능해.
           </div>
         ) : null}
-        {users.length < 2 && auth.currentUser ? (
+        {users.length < 2 && auth?.currentUser ? (
           <div className="muted" style={{ marginTop: 8 }}>
             상대가 아직 로그인 전이야. 두 사람 모두 한 번씩 로그인하면 홈이 2열로 완성돼.
           </div>

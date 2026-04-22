@@ -37,14 +37,14 @@ export default function SettingsPage() {
   const [scheduleStart, setScheduleStart] = useState(14)
   const [scheduleEnd, setScheduleEnd] = useState(16)
 
-  const myUid = auth.currentUser?.uid ?? null
+  const myUid = auth?.currentUser?.uid ?? null
   const myDayOff = useMemo(
     () => (myUid ? dayOffRows.find((r) => r.user_id === myUid) : null),
     [dayOffRows, myUid],
   )
 
   async function refresh() {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -74,7 +74,7 @@ export default function SettingsPage() {
   }, [myDayOff?.note])
 
   async function setMyDayOff(enabled: boolean) {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -97,7 +97,7 @@ export default function SettingsPage() {
   }
 
   async function addSchedule() {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -120,7 +120,7 @@ export default function SettingsPage() {
   }
 
   async function deleteSchedule(id: string) {
-    if (!auth.currentUser) return
+    if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
@@ -183,14 +183,14 @@ export default function SettingsPage() {
             <button
               className="btn"
               onClick={() => setMyDayOff(true)}
-              disabled={loading || !auth.currentUser}
+              disabled={loading || !auth?.currentUser}
             >
               내 휴무로 설정
             </button>
             <button
               className="btnSecondary"
               onClick={() => setMyDayOff(false)}
-              disabled={loading || !auth.currentUser}
+              disabled={loading || !auth?.currentUser}
             >
               내 휴무 해제
             </button>

@@ -15,7 +15,7 @@ export async function apiFetch<T>(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<T> {
-  const user = auth.currentUser
+  const user = auth?.currentUser ?? null
   const token = user ? await user.getIdToken() : null
 
   const headers = new Headers(init?.headers)

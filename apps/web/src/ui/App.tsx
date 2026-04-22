@@ -7,7 +7,7 @@ import ReflectionPage from './pages/ReflectionPage'
 import ResourcesPage from './pages/ResourcesPage'
 import SettingsPage from './pages/SettingsPage'
 import { apiFetch, type MeUser } from '../api'
-import { auth, googleProvider } from '../firebase'
+import { auth, googleProvider, isFirebaseConfigured } from '../firebase'
 import Modal from './shared/Modal'
 
 export default function App() {
@@ -17,6 +17,7 @@ export default function App() {
   const [savingNickname, setSavingNickname] = useState(false)
 
   useEffect(() => {
+    if (!auth) return
     return onAuthStateChanged(auth, async (user) => {
       setMeError(null)
       setMe(null)
@@ -30,7 +31,7 @@ export default function App() {
     })
   }, [])
 
-  const needsNickname = Boolean(auth.currentUser && me && (me.name_locked ?? 0) === 0)
+  const needsNickname = Boolean(auth?.currentUser && me && (me.name_locked ?? 0) === 0)
   const nicknameValue = nickname.trim()
   const nicknameValidLength = nicknameValue.length >= 2 && nicknameValue.length <= 12
   const nicknameValidChars = /^[0-9A-Za-z\u3131-\u318E\uAC00-\uD7A3]+$/.test(nicknameValue)
@@ -68,12 +69,20 @@ export default function App() {
           <NavLink to="/settings">설정</NavLink>
         </nav>
         <div className="topAuth">
-          {auth.currentUser ? (
-            <button className="btnSecondary" onClick={() => signOut(auth)}>
+          {auth?.currentUser ? (
+            <button
+              className="btnSecondary"
+              onClick={() => (auth ? signOut(auth) : null)}
+            >
               로그아웃
             </button>
           ) : (
-            <button className="btn" onClick={() => signInWithPopup(auth, googleProvider)}>
+            <button
+              className="btn"
+              onClick={() => (auth ? signInWithPopup(auth, googleProvider) : null)}
+              disabled={!auth}
+              title={!auth ? 'Firebase 환경변수가 필요합니다.' : undefined}
+            >
               Google 로그인
             </button>
           )}
@@ -81,6 +90,15 @@ export default function App() {
       </header>
 
       <main className="main">
+        {!isFirebaseConfigured() ? (
+          <div className="card">
+            <h2>설정 필요</h2>
+            <p className="muted">
+              Firebase 웹앱 환경변수(`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`,
+              `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`)가 비어있어서 앱을 실행할 수 없어.
+            </p>
+          </div>
+        ) : null}
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/plan" element={<PlanPage />} />
