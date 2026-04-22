@@ -1,5 +1,16 @@
 import { auth } from './firebase'
 
+function resolveApiUrl(input: RequestInfo | URL): RequestInfo | URL {
+  const base = (import.meta as any).env?.VITE_API_BASE_URL as string | undefined
+  if (!base) return input
+
+  if (typeof input !== 'string') return input
+
+  const trimmedBase = base.replace(/\/+$/, '')
+  if (!input.startsWith('/')) return input
+  return `${trimmedBase}${input}`
+}
+
 export async function apiFetch<T>(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -11,7 +22,7 @@ export async function apiFetch<T>(
   headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(input, { ...init, headers })
+  const res = await fetch(resolveApiUrl(input), { ...init, headers })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `HTTP ${res.status}`)
@@ -27,4 +38,3 @@ export type MeUser = {
   day_start_hour: number
   name_locked?: number | null
 }
-
