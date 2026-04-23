@@ -6,6 +6,8 @@ import { ensureUser } from './db'
 
 type AppBindings = { Bindings: Env }
 
+const BUILD_ID = '2026-04-23.1'
+
 const app = new Hono<AppBindings>()
 
 app.onError((err, c) => {
@@ -40,7 +42,7 @@ app.use(
 // Handle CORS preflight before any auth middleware.
 app.options('/api/*', (c) => c.body(null, 204))
 
-app.get('/api/health', (c) => c.json({ ok: true, service: 'duoingsu' }))
+app.get('/api/health', (c) => c.json({ ok: true, service: 'duoingsu', build: BUILD_ID }))
 
 app.use('/api/*', async (c, next) => {
   if (c.req.path === '/api/health') return next()
