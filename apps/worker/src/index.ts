@@ -13,7 +13,7 @@ const app = new Hono<AppBindings>()
 app.onError((err, c) => {
   // Avoid leaking stack traces in responses, but do return a consistent JSON error.
   console.error(err)
-  return c.json({ error: 'Internal Server Error' }, 500)
+  return c.json({ error: 'Internal Server Error', message: String((err as any)?.message ?? err) }, 500)
 })
 
 app.use(
@@ -42,7 +42,18 @@ app.use(
 // Handle CORS preflight before any auth middleware.
 app.options('/api/*', (c) => c.body(null, 204))
 
-app.get('/api/health', (c) => c.json({ ok: true, service: 'duoingsu', build: BUILD_ID }))
+app.get('/api/health', (c) =>
+  c.json({
+    ok: true,
+    service: 'duoingsu',
+    build: BUILD_ID,
+    hasDb: Boolean(c.env.DB),
+    hasR2: Boolean(c.env.R2),
+    hasFirebaseProjectId: Boolean(c.env.FIREBASE_PROJECT_ID),
+    hasAllowedEmails: Boolean(c.env.ALLOWED_EMAILS),
+    hasCorsOrigin: Boolean(c.env.CORS_ORIGIN),
+  }),
+)
 
 app.use('/api/*', async (c, next) => {
   if (c.req.path === '/api/health') return next()
@@ -59,6 +70,10 @@ app.use('/api/*', async (c, next) => {
 app.use('/api/*', (c, next) => {
   if (c.req.path === '/api/health') return next()
   if (c.req.method === 'OPTIONS') return next()
+  if (!c.env.FIREBASE_PROJECT_ID) {
+    // Misconfiguration: Firebase auth middleware can't verify tokens without the project id.
+    throw new Error('Missing env FIREBASE_PROJECT_ID')
+  }
   return verifyFirebaseAuth({ projectId: c.env.FIREBASE_PROJECT_ID })(c, next)
 })
 
@@ -67,6 +82,9 @@ app.use('/api/*', async (c, next) => {
   if (c.req.method === 'OPTIONS') return next()
 
   const token = getFirebaseToken(c)
+  if (!c.env.ALLOWED_EMAILS) {
+    throw new Error('Missing env ALLOWED_EMAILS')
+  }
   const allowed = c.env.ALLOWED_EMAILS.split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
@@ -82,13 +100,21 @@ app.use('/api/*', async (c, next) => {
 app.get('/api/me', async (c) => {
   const token = getFirebaseToken(c)
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
-  const user = await ensureUser(c.env, {
-    uid: String(token.uid),
-    email: String(token.email),
-    name: (token as any).name ? String((token as any).name) : undefined,
-    picture: token.picture ? String(token.picture) : undefined,
-  })
-  return c.json({ user })
+  try {
+    const user = await ensureUser(c.env, {
+      uid: String(token.uid),
+      email: String(token.email),
+      name: (token as any).name ? String((token as any).name) : undefined,
+      picture: token.picture ? String(token.picture) : undefined,
+    })
+    return c.json({ user })
+  } catch (err: any) {
+    console.error('ensureUser failed', err)
+    return c.json(
+      { error: 'Internal Server Error', message: String(err?.message ?? err) },
+      500,
+    )
+  }
 })
 
 app.post('/api/me/nickname', async (c) => {
