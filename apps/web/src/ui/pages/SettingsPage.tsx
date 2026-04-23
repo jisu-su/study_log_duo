@@ -272,6 +272,58 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+      <div className="card">
+        <h3>알림 설정</h3>
+        <div className="muted">
+          정시마다 로그 기록이 없으면 알림을 보내줘. (PWA 홈 화면 추가 필수)
+        </div>
+        <div className="modalActions" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
+          <button
+            className="btn"
+            onClick={subscribePush}
+            disabled={loading || !auth?.currentUser}
+          >
+            이 기기에서 푸시 알림 받기
+          </button>
+        </div>
+        <div className="hint" style={{ marginTop: 8 }}>
+          iOS 사용자는 반드시 <strong>Safari</strong>의 [홈 화면에 추가] 기능을 사용해야 알림을 받을 수 있어.
+        </div>
+      </div>
     </div>
   )
+}
+
+async function subscribePush() {
+  if (!('serviceWorker' in navigator)) return alert('Service Worker를 지원하지 않는 브라우저야.')
+  
+  try {
+    const registration = await navigator.serviceWorker.ready
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') {
+      alert('알림 권한이 거부되었어. 브라우저 설정에서 권한을 허용해줘.')
+      return
+    }
+
+    const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+    if (!vapidKey) {
+      alert('VITE_VAPID_PUBLIC_KEY 환경변수가 설정되지 않았어.')
+      return
+    }
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: vapidKey
+    })
+
+    await apiFetch('/api/notifications/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ subscription })
+    })
+
+    alert('알림 구독이 완료되었어! 😊')
+  } catch (e: any) {
+    console.error('Push Subscribe Error:', e)
+    alert(`구독 실패: ${e.message}`)
+  }
 }

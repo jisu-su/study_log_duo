@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { getFirebaseToken, verifyFirebaseAuth } from '@hono/firebase-auth'
 import type { Env } from './env'
 import { ensureUser } from './db'
+import { getLocalHourFromUtcMs, getNowKstLogicalDate } from '../../../shared/datetime'
 
 type AppBindings = { Bindings: Env }
 
@@ -11,9 +12,20 @@ const BUILD_ID = '2026-04-23.1'
 const app = new Hono<AppBindings>()
 
 app.onError((err, c) => {
-  // Avoid leaking stack traces in responses, but do return a consistent JSON error.
-  console.error(err)
-  return c.json({ error: 'Internal Server Error', message: String((err as any)?.message ?? err) }, 500)
+  console.error('Worker Error:', {
+    message: err.message,
+    stack: err.stack,
+    path: c.req.path,
+    method: c.req.method,
+  })
+  const status = (err as any)?.status || 500
+  return c.json(
+    {
+      error: 'Internal Server Error',
+      message: String(err?.message ?? err),
+    },
+    status as any,
+  )
 })
 
 app.use(
@@ -22,15 +34,11 @@ app.use(
     origin: (origin, c) => {
       const configured = c.env.CORS_ORIGIN?.trim()
       if (!origin) return configured || '*'
-
-      // Always allow local dev.
-      if (origin === 'http://localhost:5173') return origin
-      if (origin === 'http://127.0.0.1:5173') return origin
-
-      // In production, lock down to the single configured Pages origin.
-      if (configured) return origin === configured ? origin : ''
-
-      // If not configured, fall back to allowing same-origin callers only.
+      if (origin === 'http://localhost:5173' || origin === 'http://127.0.0.1:5173' || origin === 'http://localhost:4173') return origin
+      if (configured) {
+        const allowed = configured.split(',').map((s: string) => s.trim())
+        if (allowed.includes(origin)) return origin
+      }
       return ''
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -39,61 +47,62 @@ app.use(
   }),
 )
 
-// Handle CORS preflight before any auth middleware.
 app.options('/api/*', (c) => c.body(null, 204))
 
-app.get('/api/health', (c) =>
-  c.json({
+app.get('/api/health', async (c) => {
+  let dbStatus = 'missing'
+  let dbError = null
+  let userCount = 0
+  if (c.env.DB) {
+    try {
+      const res = await c.env.DB.prepare('SELECT count(*) as count FROM users').first()
+      dbStatus = 'ok'
+      userCount = (res as any)?.count ?? 0
+    } catch (err: any) {
+      dbStatus = 'error'
+      dbError = err.message
+    }
+  }
+  return c.json({
     ok: true,
     service: 'duoingsu',
     build: BUILD_ID,
-    hasDb: Boolean(c.env.DB),
-    hasR2: Boolean(c.env.R2),
-    hasFirebaseProjectId: Boolean(c.env.FIREBASE_PROJECT_ID),
-    hasAllowedEmails: Boolean(c.env.ALLOWED_EMAILS),
-    hasCorsOrigin: Boolean(c.env.CORS_ORIGIN),
-  }),
-)
+    env: {
+      hasDb: Boolean(c.env.DB),
+      dbStatus,
+      dbError,
+      userCount,
+      hasR2: Boolean(c.env.R2),
+      hasFirebaseProjectId: Boolean(c.env.FIREBASE_PROJECT_ID),
+      hasAllowedEmails: Boolean(c.env.ALLOWED_EMAILS),
+    },
+  })
+})
 
 app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health') return next()
-  if (c.req.method === 'OPTIONS') return next()
-
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
   const authz = c.req.header('authorization') || c.req.header('Authorization') || ''
-  if (!authz.startsWith('Bearer ')) {
-    return c.json({ error: 'Missing Authorization: Bearer <token>' }, 401)
-  }
-
+  if (!authz.startsWith('Bearer ')) return c.json({ error: 'Missing Authorization: Bearer <token>' }, 401)
   await next()
 })
 
-app.use('/api/*', (c, next) => {
-  if (c.req.path === '/api/health') return next()
-  if (c.req.method === 'OPTIONS') return next()
+app.use('/api/*', async (c, next) => {
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
   if (!c.env.FIREBASE_PROJECT_ID) {
-    // Misconfiguration: Firebase auth middleware can't verify tokens without the project id.
-    throw new Error('Missing env FIREBASE_PROJECT_ID')
+    throw new Error('Config Error: Missing FIREBASE_PROJECT_ID')
   }
   return verifyFirebaseAuth({ projectId: c.env.FIREBASE_PROJECT_ID })(c, next)
 })
 
 app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health') return next()
-  if (c.req.method === 'OPTIONS') return next()
-
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
   const token = getFirebaseToken(c)
   if (!c.env.ALLOWED_EMAILS) {
-    throw new Error('Missing env ALLOWED_EMAILS')
+    throw new Error('Config Error: Missing ALLOWED_EMAILS')
   }
-  const allowed = c.env.ALLOWED_EMAILS.split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-
+  const allowed = c.env.ALLOWED_EMAILS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
   const email = String(token?.email ?? '').toLowerCase()
-  if (!allowed.includes(email)) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
+  if (!allowed.includes(email)) return c.json({ error: 'Unauthorized', message: `Email ${email} not allowed` }, 401)
   await next()
 })
 
@@ -110,10 +119,7 @@ app.get('/api/me', async (c) => {
     return c.json({ user })
   } catch (err: any) {
     console.error('ensureUser failed', err)
-    return c.json(
-      { error: 'Internal Server Error', message: String(err?.message ?? err) },
-      500,
-    )
+    return c.json({ error: 'Internal Server Error', message: `DB Error: ${err.message}` }, 500)
   }
 })
 
@@ -1065,10 +1071,132 @@ app.get('/api/resources/:id/file', async (c) => {
   return new Response(obj.body, { headers })
 })
 
+app.post('/api/notifications/subscribe', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  const body = (await c.req.json().catch(() => null)) as any
+  if (!body?.subscription) return c.json({ error: 'subscription is required' }, 400)
+
+  await c.env.DB.prepare(
+    `UPDATE users SET push_subscription = ? WHERE id = ?`,
+  )
+    .bind(JSON.stringify(body.subscription), String(token.uid))
+    .run()
+
+  return c.json({ ok: true })
+})
+
 const handler: ExportedHandler<Env> = {
   fetch(request, env, ctx) {
     return app.fetch(request, env, ctx)
   },
+  async scheduled(event, env, ctx) {
+    const nowMs = Date.now()
+    const hour = getLocalHourFromUtcMs(nowMs)
+    const logicalDate = getNowKstLogicalDate(6) // default 6am start
+
+    console.log(`Cron triggered at hour ${hour}, logicalDate ${logicalDate}`)
+
+    // 1. Fetch all users
+    const users = await env.DB.prepare(`SELECT id, email, name, push_subscription FROM users`).all()
+
+    for (const user of users.results as any[]) {
+      const userId = user.id
+
+      // Filter 1: Check if it's a day off
+      const dayOff = await env.DB.prepare(
+        `SELECT id FROM day_offs WHERE user_id = ? AND logical_date = ?`,
+      )
+        .bind(userId, logicalDate)
+        .first()
+      if (dayOff) {
+        console.log(`User ${userId} has a day off. Skipping alert.`)
+        continue
+      }
+
+      // Filter 2: Check if current hour is within a schedule/appointment
+      const schedule = await env.DB.prepare(
+        `SELECT id FROM schedules WHERE user_id = ? AND logical_date = ? AND start_hour <= ? AND end_hour > ?`,
+      )
+        .bind(userId, logicalDate, hour, hour)
+        .first()
+      if (schedule) {
+        console.log(`User ${userId} is in a schedule. Skipping alert.`)
+        continue
+      }
+
+      // Filter 3: Check if log already exists for this hour
+      const log = await env.DB.prepare(
+        `SELECT id FROM time_logs WHERE user_id = ? AND logical_date = ? AND hour = ?`,
+      )
+        .bind(userId, logicalDate, hour)
+        .first()
+      if (log) {
+        console.log(`User ${userId} already submitted a log for ${hour}.`)
+        continue
+      }
+
+      // All filters passed -> Send Nudge!
+      console.log(`Nudging user ${user.name} (${userId}) for hour ${hour}`)
+      
+      const payload = {
+        title: `📝 ${user.name}야, ${hour}시 로그 기록하자!`,
+        body: '오늘 작업한 내용을 짧게 남겨줘 😊',
+        url: '/',
+      }
+
+      let pushSent = false
+      if (user.push_subscription) {
+        try {
+          // Note: Real Web Push implementation requires constructing VAPID headers.
+          // For now, we'll implement a skeleton for the sending logic.
+          // In a real-world scenario, you'd use a cloud service or a Worker-compatible library.
+          pushSent = await sendWebPush(user.push_subscription, payload, env)
+        } catch (e) {
+          console.error(`Failed to send push to ${user.name}:`, e)
+        }
+      }
+
+      if (!pushSent && env.RESEND_API_KEY && env.RESEND_FROM_EMAIL) {
+        try {
+          await sendEmailFallback(user.email, payload, env)
+        } catch (e) {
+          console.error(`Failed to send email fallback to ${user.email}:`, e)
+        }
+      }
+    }
+  },
+}
+
+async function sendWebPush(subscriptionJson: string, payload: any, env: Env): Promise<boolean> {
+  // This is a placeholder for the actual VAPID signing logic.
+  // Implementing full VAPID in Workers requires subtle crypto or a dedicated library.
+  console.log('Sending Web Push (Placeholder):', subscriptionJson, payload)
+  // return true if successfully sent
+  return false 
+}
+
+async function sendEmailFallback(email: string, payload: any, env: Env) {
+  if (!env.RESEND_API_KEY) return
+  
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: env.RESEND_FROM_EMAIL || 'StudyLog <onboarding@resend.dev>',
+      to: [email],
+      subject: payload.title,
+      text: payload.body,
+    }),
+  })
+
+  if (!res.ok) {
+    const error = await res.text()
+    throw new Error(`Resend API error: ${error}`)
+  }
 }
 
 export default handler
