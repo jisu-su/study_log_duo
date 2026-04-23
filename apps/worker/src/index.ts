@@ -1019,4 +1019,10 @@ app.get('/api/resources/:id/file', async (c) => {
   return new Response(obj.body, { headers })
 })
 
-export default app
+const handler: ExportedHandler<Env> = {
+  fetch(request, env, ctx) {
+    return app.fetch(request, env, ctx)
+  },
+}
+
+export default handler
