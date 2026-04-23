@@ -10,6 +10,9 @@ ALLOWED_EMAILS = "a@gmail.com,b@gmail.com"
 # For production, set this to your Pages origin (e.g. https://duoingsu.pages.dev).
 CORS_ORIGIN = "https://duoingsu.pages.dev"
 
+[observability.logs]
+enabled = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "duoingsu-db"
