@@ -8,6 +8,12 @@ type AppBindings = { Bindings: Env }
 
 const app = new Hono<AppBindings>()
 
+app.onError((err, c) => {
+  // Avoid leaking stack traces in responses, but do return a consistent JSON error.
+  console.error(err)
+  return c.json({ error: 'Internal Server Error' }, 500)
+})
+
 app.use(
   '*',
   cors({
@@ -35,6 +41,18 @@ app.use(
 app.options('/api/*', (c) => c.body(null, 204))
 
 app.get('/api/health', (c) => c.json({ ok: true, service: 'duoingsu' }))
+
+app.use('/api/*', async (c, next) => {
+  if (c.req.path === '/api/health') return next()
+  if (c.req.method === 'OPTIONS') return next()
+
+  const authz = c.req.header('authorization') || c.req.header('Authorization') || ''
+  if (!authz.startsWith('Bearer ')) {
+    return c.json({ error: 'Missing Authorization: Bearer <token>' }, 401)
+  }
+
+  await next()
+})
 
 app.use('/api/*', (c, next) => {
   if (c.req.path === '/api/health') return next()
