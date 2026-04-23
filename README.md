@@ -25,7 +25,7 @@ Do NOT commit real emails or secrets.
 ```powershell
 npm install
 ```
-
+  
 ### 2) Web env
 
 Copy `apps/web/.env.example` to `apps/web/.env.local` and fill your Firebase Web App config.
