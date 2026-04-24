@@ -79,32 +79,38 @@ app.get('/api/health', async (c) => {
   })
 })
 
-app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
-  const authz = c.req.header('authorization') || c.req.header('Authorization') || ''
-  if (!authz.startsWith('Bearer ')) return c.json({ error: 'Missing Authorization: Bearer <token>' }, 401)
-  await next()
-})
+// 82번 라인부터 시작 (app.use('/api/*', ...) 세 덩어리를 아래 내용으로 교환)
 
 app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
-  if (!c.env.FIREBASE_PROJECT_ID) {
-    throw new Error('Config Error: Missing FIREBASE_PROJECT_ID')
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
+  const authz = c.req.header('authorization') || c.req.header('Authorization') || '';
+  if (!authz.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized', message: 'Missing Bearer Token' }, 401);
   }
-  return verifyFirebaseAuth({ projectId: c.env.FIREBASE_PROJECT_ID })(c, next)
-})
+  await next();
+});
 
 app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
-  const token = getFirebaseToken(c)
-  if (!c.env.ALLOWED_EMAILS) {
-    throw new Error('Config Error: Missing ALLOWED_EMAILS')
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
+  const projectId = c.env.FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    return c.json({ error: 'Internal Server Error', message: 'Missing FIREBASE_PROJECT_ID' }, 500);
   }
-  const allowed = c.env.ALLOWED_EMAILS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
-  const email = String(token?.email ?? '').toLowerCase()
-  if (!allowed.includes(email)) return c.json({ error: 'Unauthorized', message: `Email ${email} not allowed` }, 401)
-  await next()
-})
+  return verifyFirebaseAuth({ projectId })(c, next);
+});
+
+app.use('/api/*', async (c, next) => {
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
+  const token = getFirebaseToken(c);
+  const email = (token?.email || '').toLowerCase().trim();
+  const allowedList = (c.env.ALLOWED_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  if (!email || !allowedList.includes(email)) {
+    return c.json({ error: 'Unauthorized', message: `Email(${email}) not allowed` }, 403);
+  }
+  await next();
+});
+
 
 app.get('/api/me', async (c) => {
   const token = getFirebaseToken(c)
