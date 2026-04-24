@@ -83,32 +83,42 @@ app.get('/api/health', async (c) => {
 
 app.use('/api/*', async (c, next) => {
   if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
+  
   const authz = c.req.header('authorization') || c.req.header('Authorization') || '';
   if (!authz.startsWith('Bearer ')) {
     return c.json({ error: 'Unauthorized', message: 'Missing Bearer Token' }, 401);
   }
-  await next();
-});
 
-app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
   const projectId = c.env.FIREBASE_PROJECT_ID;
   if (!projectId) {
     return c.json({ error: 'Internal Server Error', message: 'Missing FIREBASE_PROJECT_ID' }, 500);
   }
-  return verifyFirebaseAuth({ projectId })(c, next);
-});
 
-app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
-  const token = getFirebaseToken(c);
-  const email = (token?.email || '').toLowerCase().trim();
-  const allowedList = (c.env.ALLOWED_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  try {
+    // 1. Verify Firebase Auth
+    const authMiddleware = verifyFirebaseAuth({ projectId });
+    const response = await authMiddleware(c, next);
+    
+    // If verifyFirebaseAuth returns a response (like 401), return it immediately
+    if (response instanceof Response) return response;
 
-  if (!email || !allowedList.includes(email)) {
-    return c.json({ error: 'Unauthorized', message: `Email(${email}) not allowed` }, 403);
+    // 2. Check Whitelist
+    const token = getFirebaseToken(c);
+    const email = (token?.email || '').toLowerCase().trim();
+    const allowedStr = c.env.ALLOWED_EMAILS || '';
+    const allowedList = allowedStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+    if (!email || !allowedList.includes(email)) {
+      console.error(`Access Denied for email: "${email}". Allowed: ${allowedList.join(', ')}`);
+      return c.json({ 
+        error: 'Unauthorized', 
+        message: `Email(${email || 'unknown'}) is not in the whitelist.` 
+      }, 403);
+    }
+  } catch (err: any) {
+    console.error('Auth Middleware Error:', err);
+    return c.json({ error: 'Authentication Error', message: err.message }, 500);
   }
-  await next();
 });
 
 
