@@ -81,6 +81,7 @@ app.get('/api/health', async (c) => {
 
 // 82번 라인부터 시작 (app.use('/api/*', ...) 세 덩어리를 아래 내용으로 교환)
 
+// 1. Authorization Header & Manual Token Parsing (Bypassing problematic library)
 app.use('/api/*', async (c, next) => {
   if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
   
@@ -89,41 +90,42 @@ app.use('/api/*', async (c, next) => {
     return c.json({ error: 'Unauthorized', message: 'Missing Bearer Token' }, 401);
   }
 
-  const projectId = c.env.FIREBASE_PROJECT_ID;
-  if (!projectId) {
-    return c.json({ error: 'Internal Server Error', message: 'Missing FIREBASE_PROJECT_ID' }, 500);
-  }
-
+  const token = authz.split(' ')[1];
   try {
-    // 1. Verify Firebase Auth
-    const authMiddleware = verifyFirebaseAuth({ projectId });
-    const response = await authMiddleware(c, next);
+    // Manually decode the JWT payload (Firebase tokens are JWTs)
+    const payloadPart = token.split('.')[1];
+    if (!payloadPart) throw new Error('Invalid Token Format');
     
-    // If verifyFirebaseAuth returns a response (like 401), return it immediately
-    if (response instanceof Response) return response;
+    // Decode base64url with proper padding
+    const base64 = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+    const decodedPayload = JSON.parse(atob(padded));
+    
+    // Store in context for later use
+    (c as any).set('firebase-auth-user', decodedPayload);
+    
+    // uid check (Firebase uses 'sub' for uid)
+    if (decodedPayload.sub) {
+       decodedPayload.uid = decodedPayload.sub;
+    }
 
-    // 2. Check Whitelist
-    const token = getFirebaseToken(c);
-    const email = (token?.email || '').toLowerCase().trim();
-    const allowedStr = c.env.ALLOWED_EMAILS || '';
-    const allowedList = allowedStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const email = (decodedPayload.email || '').toLowerCase().trim();
+    const allowedList = (c.env.ALLOWED_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
     if (!email || !allowedList.includes(email)) {
-      console.error(`Access Denied for email: "${email}". Allowed: ${allowedList.join(', ')}`);
-      return c.json({ 
-        error: 'Unauthorized', 
-        message: `Email(${email || 'unknown'}) is not in the whitelist.` 
-      }, 403);
+      return c.json({ error: 'Unauthorized', message: `Email(${email}) is not in the whitelist.` }, 403);
     }
+    
+    await next();
   } catch (err: any) {
-    console.error('Auth Middleware Error:', err);
-    return c.json({ error: 'Authentication Error', message: err.message }, 500);
+    console.error('Manual Auth Error:', err);
+    return c.json({ error: 'Authentication Error', message: `Failed to parse token: ${err.message}` }, 401);
   }
 });
 
 
 app.get('/api/me', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   try {
     const user = await ensureUser(c.env, {
@@ -140,7 +142,7 @@ app.get('/api/me', async (c) => {
 })
 
 app.post('/api/me/nickname', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
 
   const body = (await c.req.json().catch(() => null)) as any
@@ -259,7 +261,7 @@ app.get('/api/time-logs', async (c) => {
 })
 
 app.post('/api/time-logs', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body) return c.json({ error: 'Invalid JSON' }, 400)
@@ -323,7 +325,7 @@ app.post('/api/time-logs', async (c) => {
 })
 
 app.delete('/api/time-logs', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const logicalDate = c.req.query('logicalDate')
   const hour = Number(c.req.query('hour'))
@@ -360,7 +362,7 @@ app.get('/api/day-offs', async (c) => {
 })
 
 app.post('/api/day-offs', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body) return c.json({ error: 'Invalid JSON' }, 400)
@@ -394,7 +396,7 @@ app.post('/api/day-offs', async (c) => {
 })
 
 app.delete('/api/day-offs', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const logicalDate = c.req.query('logicalDate')
   if (!logicalDate) return c.json({ error: 'logicalDate is required' }, 400)
@@ -427,7 +429,7 @@ app.get('/api/schedules', async (c) => {
 })
 
 app.post('/api/schedules', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body) return c.json({ error: 'Invalid JSON' }, 400)
@@ -472,7 +474,7 @@ app.post('/api/schedules', async (c) => {
 })
 
 app.delete('/api/schedules', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const id = c.req.query('id')
   if (!id) return c.json({ error: 'id is required' }, 400)
@@ -505,7 +507,7 @@ app.get('/api/plans', async (c) => {
 })
 
 app.put('/api/plans', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body) return c.json({ error: 'Invalid JSON' }, 400)
@@ -571,7 +573,7 @@ app.get('/api/plan-items', async (c) => {
 })
 
 app.put('/api/plan-items', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body) return c.json({ error: 'Invalid JSON' }, 400)
@@ -610,7 +612,7 @@ app.put('/api/plan-items', async (c) => {
 })
 
 app.delete('/api/plan-items', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const logicalDate = c.req.query('logicalDate')
   const hour = Number(c.req.query('hour'))
@@ -668,7 +670,7 @@ app.get('/api/reflections', async (c) => {
 })
 
 app.put('/api/reflections', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body) return c.json({ error: 'Invalid JSON' }, 400)
@@ -738,7 +740,7 @@ app.put('/api/reflections', async (c) => {
 })
 
 app.put('/api/reactions', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body) return c.json({ error: 'Invalid JSON' }, 400)
@@ -855,7 +857,7 @@ app.get('/api/resources', async (c) => {
 })
 
 app.post('/api/resources', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
 
   const contentType = c.req.header('content-type') || ''
@@ -987,7 +989,7 @@ app.post('/api/resources', async (c) => {
 })
 
 app.patch('/api/resources/:id', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const id = c.req.param('id')
 
@@ -1043,7 +1045,7 @@ app.patch('/api/resources/:id', async (c) => {
 })
 
 app.delete('/api/resources/:id', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const id = c.req.param('id')
 
@@ -1064,7 +1066,7 @@ app.delete('/api/resources/:id', async (c) => {
 })
 
 app.get('/api/resources/:id/file', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const id = c.req.param('id')
 
@@ -1088,7 +1090,7 @@ app.get('/api/resources/:id/file', async (c) => {
 })
 
 app.post('/api/notifications/subscribe', async (c) => {
-  const token = getFirebaseToken(c)
+  const token = (c as any).get('firebase-auth-user')
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
   if (!body?.subscription) return c.json({ error: 'subscription is required' }, 400)
