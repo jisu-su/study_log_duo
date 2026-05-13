@@ -766,8 +766,7 @@ app.put('/api/reactions', async (c) => {
   await c.env.DB.prepare(
     `INSERT INTO reactions (id, reflection_id, user_id, emoji)
      VALUES (?, ?, ?, ?)
-     ON CONFLICT(reflection_id, user_id) DO UPDATE SET
-       emoji = excluded.emoji`,
+     ON CONFLICT(reflection_id, user_id, emoji) DO NOTHING`,
   )
     .bind(crypto.randomUUID(), reflectionId, String(token.uid), emoji)
     .run()

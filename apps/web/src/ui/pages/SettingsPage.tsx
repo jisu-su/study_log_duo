@@ -26,7 +26,9 @@ function hourOptions() {
 }
 
 export default function SettingsPage() {
-  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
+  const todayLogicalDate = getNowKstLogicalDate(6)
+  const [dayOffDate, setDayOffDate] = useState(() => todayLogicalDate)
+  const [scheduleDate, setScheduleDate] = useState(() => todayLogicalDate)
   const [dayOffRows, setDayOffRows] = useState<DayOffRow[]>([])
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -43,35 +45,51 @@ export default function SettingsPage() {
     [dayOffRows, myUid],
   )
 
-  async function refresh() {
+  async function refreshDayOffs() {
     if (!auth?.currentUser) return
     setLoading(true)
     setError(null)
     try {
       const dayOffData = await apiFetch<{ logicalDate: string; rows: DayOffRow[] }>(
-        `/api/day-offs?logicalDate=${encodeURIComponent(logicalDate)}`,
+        `/api/day-offs?logicalDate=${encodeURIComponent(dayOffDate)}`,
       )
       setDayOffRows(dayOffData.rows)
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to load day offs')
+    } finally {
+      setLoading(false)
+    }
+  }
 
+  async function refreshSchedules() {
+    if (!auth?.currentUser) return
+    setLoading(true)
+    setError(null)
+    try {
       const scheduleData = await apiFetch<{ logicalDate: string; rows: ScheduleRow[] }>(
-        `/api/schedules?logicalDate=${encodeURIComponent(logicalDate)}`,
+        `/api/schedules?logicalDate=${encodeURIComponent(scheduleDate)}`,
       )
       setScheduleRows(scheduleData.rows)
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to load settings')
+      setError(e?.message ?? 'Failed to load schedules')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    refresh()
+    refreshDayOffs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logicalDate, myUid])
+  }, [dayOffDate, myUid])
 
   useEffect(() => {
-    if (myDayOff?.note != null) setDayOffNote(myDayOff.note)
-  }, [myDayOff?.note])
+    refreshSchedules()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleDate, myUid])
+
+  useEffect(() => {
+    setDayOffNote(myDayOff?.note ?? '')
+  }, [myDayOff?.note, dayOffDate])
 
   async function setMyDayOff(enabled: boolean) {
     if (!auth?.currentUser) return
@@ -81,14 +99,14 @@ export default function SettingsPage() {
       if (enabled) {
         await apiFetch('/api/day-offs', {
           method: 'POST',
-          body: JSON.stringify({ logicalDate, note: dayOffNote.trim() || null }),
+          body: JSON.stringify({ logicalDate: dayOffDate, note: dayOffNote.trim() || null }),
         })
       } else {
-        await apiFetch(`/api/day-offs?logicalDate=${encodeURIComponent(logicalDate)}`, {
+        await apiFetch(`/api/day-offs?logicalDate=${encodeURIComponent(dayOffDate)}`, {
           method: 'DELETE',
         })
       }
-      await refresh()
+      await refreshDayOffs()
     } catch (e: any) {
       setError(e?.message ?? 'Failed to update day off')
     } finally {
@@ -104,14 +122,14 @@ export default function SettingsPage() {
       await apiFetch('/api/schedules', {
         method: 'POST',
         body: JSON.stringify({
-          logicalDate,
+          logicalDate: scheduleDate,
           startHour: scheduleStart,
           endHour: scheduleEnd,
           title: scheduleTitle.trim(),
         }),
       })
       setScheduleTitle('')
-      await refresh()
+      await refreshSchedules()
     } catch (e: any) {
       setError(e?.message ?? 'Failed to add schedule')
     } finally {
@@ -125,7 +143,7 @@ export default function SettingsPage() {
     setError(null)
     try {
       await apiFetch(`/api/schedules?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-      await refresh()
+      await refreshSchedules()
     } catch (e: any) {
       setError(e?.message ?? 'Failed to delete schedule')
     } finally {
@@ -145,29 +163,36 @@ export default function SettingsPage() {
         <div className="homeHeader">
           <div>
             <h2>설정</h2>
-            <div className="muted">logical_date 기준으로 휴무/약속을 관리해.</div>
-          </div>
-          <div className="actions">
-            <label className="label" style={{ gap: 4 }}>
-              날짜
-              <input
-                className="textInput"
-                type="date"
-                value={logicalDate}
-                onChange={(e) => setLogicalDate(e.target.value)}
-              />
-            </label>
-            <button className="btnSecondary" onClick={() => refresh()} disabled={loading}>
-              새로고침
-            </button>
+            <div className="muted">휴무와 약속은 각각 날짜를 따로 골라 관리해.</div>
           </div>
         </div>
         {error ? <div className="error">{error}</div> : null}
       </div>
 
       <div className="card">
-        <h3>휴무</h3>
-        <div className="muted">휴무면 홈 타임라인에서 하루 종일 “휴무”로 표시돼.</div>
+        <div className="homeHeader">
+          <div>
+            <h3>휴무</h3>
+            <div className="muted">휴무면 홈 타임라인에서 하루 종일 “휴무”로 표시돼.</div>
+          </div>
+          <div className="actions">
+            <label className="label" style={{ gap: 4 }}>
+              휴무 날짜
+              <input
+                className="textInput"
+                type="date"
+                value={dayOffDate}
+                onChange={(e) => {
+                  setDayOffDate(e.target.value)
+                  setDayOffNote('')
+                }}
+              />
+            </label>
+            <button className="btnSecondary" onClick={() => refreshDayOffs()} disabled={loading}>
+              새로고침
+            </button>
+          </div>
+        </div>
         <div style={{ marginTop: 10 }} className="row">
           <label className="label">
             휴무 메모 (선택)
@@ -199,8 +224,26 @@ export default function SettingsPage() {
       </div>
 
       <div className="card">
-        <h3>약속</h3>
-        <div className="muted">해당 시간대는 홈에서 “📅 약속”으로 표시되고 로그 입력이 막혀.</div>
+        <div className="homeHeader">
+          <div>
+            <h3>약속</h3>
+            <div className="muted">해당 시간대는 홈에서 “📅 약속”으로 표시되고 로그 입력이 막혀.</div>
+          </div>
+          <div className="actions">
+            <label className="label" style={{ gap: 4 }}>
+              약속 날짜
+              <input
+                className="textInput"
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+              />
+            </label>
+            <button className="btnSecondary" onClick={() => refreshSchedules()} disabled={loading}>
+              새로고침
+            </button>
+          </div>
+        </div>
 
         <div style={{ marginTop: 10 }} className="row">
           <label className="label">

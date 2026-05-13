@@ -120,10 +120,18 @@ export default function ReflectionPage() {
     return reactions.filter((r) => r.reflection_id === id)
   }, [reactions, partnerReflection?.reflection_id])
 
-  const myReactionEmoji = useMemo(() => {
+  const reactionsForMine = useMemo(() => {
+    const id = myReflection?.reflection_id
+    if (!id) return []
+    return reactions.filter((r) => r.reflection_id === id)
+  }, [reactions, myReflection?.reflection_id])
+
+  const myReactionEmojis = useMemo(() => {
     const id = partnerReflection?.reflection_id
-    if (!id || !myUid) return null
-    return reactions.find((r) => r.reflection_id === id && r.user_id === myUid)?.emoji ?? null
+    if (!id || !myUid) return []
+    return reactions
+      .filter((r) => r.reflection_id === id && r.user_id === myUid)
+      .map((r) => r.emoji)
   }, [reactions, partnerReflection?.reflection_id, myUid])
 
   async function react(emoji: '👍' | '💪' | '❤️') {
@@ -218,47 +226,27 @@ export default function ReflectionPage() {
           </div>
         </div>
 
-        <div className="card">
-          <h3>상대 회고</h3>
+        <div className="stack">
+          <div className="card">
+            <h3>내 회고 카드</h3>
+            {!myReflection?.reflection_id ? (
+              <div className="muted">아직 저장된 내 회고가 없어.</div>
+            ) : (
+              <ReflectionCard
+                reflection={myReflection}
+                reactions={reactionsForMine}
+                reactionTitle="상대 공감"
+              />
+            )}
+          </div>
+
+          <div className="card">
+            <h3>상대 회고</h3>
           {!partnerReflection?.reflection_id ? (
             <div className="muted">상대가 아직 회고를 작성하지 않았어.</div>
           ) : (
             <>
-              <div className="muted" style={{ marginBottom: 10 }}>
-                {partnerReflection.user_name} · 업데이트 {partnerReflection.updated_at ?? '-'}
-              </div>
-
-              <div className="sectionTitle">감정 태그</div>
-              <div className="chips">
-                {safeParseJsonArray(partnerReflection.emotion_tags).length === 0 ? (
-                  <div className="muted">-</div>
-                ) : (
-                  safeParseJsonArray(partnerReflection.emotion_tags).map((t) => (
-                    <span key={t} className="chip on">
-                      {t}
-                    </span>
-                  ))
-                )}
-              </div>
-
-              <div className="sectionTitle" style={{ marginTop: 10 }}>
-                잘한 것 / 못한 것
-              </div>
-              <div className="box">
-                <div className="boxRow">
-                  <div className="boxKey">잘한 것</div>
-                  <div className="boxVal">{partnerReflection.went_well || '-'}</div>
-                </div>
-                <div className="boxRow">
-                  <div className="boxKey">못한 것</div>
-                  <div className="boxVal">{partnerReflection.went_wrong || '-'}</div>
-                </div>
-              </div>
-
-              <div className="sectionTitle" style={{ marginTop: 10 }}>
-                메모
-              </div>
-              <div className="box">{partnerReflection.memo || '-'}</div>
+              <ReflectionCard reflection={partnerReflection} reactions={reactionsForPartner} />
 
               <div className="sectionTitle" style={{ marginTop: 10 }}>
                 공감
@@ -267,7 +255,7 @@ export default function ReflectionPage() {
                 {(['👍', '💪', '❤️'] as const).map((e) => (
                   <button
                     key={e}
-                    className={`reactBtn ${myReactionEmoji === e ? 'on' : ''}`}
+                    className={`reactBtn ${myReactionEmojis.includes(e) ? 'on' : ''}`}
                     onClick={() => react(e)}
                     type="button"
                     disabled={loading}
@@ -278,6 +266,7 @@ export default function ReflectionPage() {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
     </div>
@@ -297,4 +286,68 @@ function safeParseJsonArray(value: string | null): string[] {
 
 function countEmoji(rows: ReactionRow[], emoji: ReactionRow['emoji']): number {
   return rows.filter((r) => r.emoji === emoji).length
+}
+
+function ReflectionCard(props: {
+  reflection: ReflectionRow
+  reactions: ReactionRow[]
+  reactionTitle?: string
+}) {
+  const { reflection, reactions, reactionTitle } = props
+  const tags = safeParseJsonArray(reflection.emotion_tags)
+
+  return (
+    <>
+      <div className="muted" style={{ marginBottom: 10 }}>
+        {reflection.user_name} · 업데이트 {reflection.updated_at ?? '-'}
+      </div>
+
+      <div className="sectionTitle">감정 태그</div>
+      <div className="chips">
+        {tags.length === 0 ? (
+          <div className="muted">-</div>
+        ) : (
+          tags.map((t) => (
+            <span key={t} className="chip on">
+              {t}
+            </span>
+          ))
+        )}
+      </div>
+
+      <div className="sectionTitle" style={{ marginTop: 10 }}>
+        잘한 것 / 못한 것
+      </div>
+      <div className="box">
+        <div className="boxRow">
+          <div className="boxKey">잘한 것</div>
+          <div className="boxVal">{reflection.went_well || '-'}</div>
+        </div>
+        <div className="boxRow">
+          <div className="boxKey">못한 것</div>
+          <div className="boxVal">{reflection.went_wrong || '-'}</div>
+        </div>
+      </div>
+
+      <div className="sectionTitle" style={{ marginTop: 10 }}>
+        메모
+      </div>
+      <div className="box">{reflection.memo || '-'}</div>
+
+      {reactionTitle ? (
+        <>
+          <div className="sectionTitle" style={{ marginTop: 10 }}>
+            {reactionTitle}
+          </div>
+          <div className="reactions">
+            {(['👍', '💪', '❤️'] as const).map((e) => (
+              <span key={e} className="reactCount">
+                {e} {countEmoji(reactions, e)}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </>
+  )
 }

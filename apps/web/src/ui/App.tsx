@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes } from 'react-router-dom'
+import type { User } from 'firebase/auth'
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import HomePage from './pages/HomePage'
@@ -13,12 +14,19 @@ import Modal from './shared/Modal'
 export default function App() {
   const [me, setMe] = useState<MeUser | null>(null)
   const [meError, setMeError] = useState<string | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [authUser, setAuthUser] = useState<User | null>(null)
   const [nickname, setNickname] = useState('')
   const [savingNickname, setSavingNickname] = useState(false)
 
   useEffect(() => {
-    if (!auth) return
+    if (!auth) {
+      setAuthReady(true)
+      return
+    }
     return onAuthStateChanged(auth, async (user) => {
+      setAuthReady(true)
+      setAuthUser(user)
       setMeError(null)
       setMe(null)
       if (!user) return
@@ -31,7 +39,8 @@ export default function App() {
     })
   }, [])
 
-  const needsNickname = Boolean(auth?.currentUser && me && (me.name_locked ?? 0) === 0)
+  const needsNickname = Boolean(authUser && me && (me.name_locked ?? 0) === 0)
+  const canUseApp = Boolean(authUser && me && !needsNickname)
   const nicknameValue = nickname.trim()
   const nicknameValidLength = nicknameValue.length >= 2 && nicknameValue.length <= 12
   const nicknameValidChars = /^[0-9A-Za-z\u3131-\u318E\uAC00-\uD7A3]+$/.test(nicknameValue)
@@ -59,23 +68,28 @@ export default function App() {
     <div className="layout">
       <header className="topbar">
         <div className="brand">duoingsu</div>
-        <nav className="nav">
-          <NavLink to="/" end>
-            홈
-          </NavLink>
-          <NavLink to="/plan">플랜</NavLink>
-          <NavLink to="/reflection">느낀 점</NavLink>
-          <NavLink to="/resources">자료</NavLink>
-          <NavLink to="/settings">설정</NavLink>
-        </nav>
+        {canUseApp ? (
+          <nav className="nav">
+            <NavLink to="/" end>
+              홈
+            </NavLink>
+            <NavLink to="/plan">플랜</NavLink>
+            <NavLink to="/reflection">느낀 점</NavLink>
+            <NavLink to="/resources">자료</NavLink>
+            <NavLink to="/settings">설정</NavLink>
+          </nav>
+        ) : null}
         <div className="topAuth">
-          {auth?.currentUser ? (
-            <button
-              className="btnSecondary"
-              onClick={() => (auth ? signOut(auth) : null)}
-            >
-              로그아웃
-            </button>
+          {authUser ? (
+            <>
+              {me ? <span className="userBadge">{me.name}</span> : null}
+              <button
+                className="btnSecondary"
+                onClick={() => (auth ? signOut(auth) : null)}
+              >
+                로그아웃
+              </button>
+            </>
           ) : (
             <button
               className="btn"
@@ -108,13 +122,49 @@ export default function App() {
             </p>
           </div>
         ) : null}
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/plan" element={<PlanPage />} />
-          <Route path="/reflection" element={<ReflectionPage />} />
-          <Route path="/resources" element={<ResourcesPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
+        {!authReady ? (
+          <div className="publicHome">
+            <div className="publicPanel">
+              <h1>duoingsu</h1>
+              <p>둘만의 스터디 기록 공간을 불러오는 중이야.</p>
+            </div>
+          </div>
+        ) : !authUser ? (
+          <div className="publicHome">
+            <div className="publicPanel">
+              <h1>duoingsu</h1>
+              <p>허용된 두 사람만 사용할 수 있는 비공개 스터디 로그야.</p>
+              <button
+                className="btn"
+                onClick={() => (auth ? signInWithPopup(auth, googleProvider) : null)}
+                disabled={!auth}
+              >
+                Google 로그인
+              </button>
+            </div>
+          </div>
+        ) : meError && !me ? (
+          <div className="publicHome">
+            <div className="publicPanel">
+              <h1>접근할 수 없어</h1>
+              <p>허용된 계정으로 로그인했는지 확인해줘.</p>
+              <button
+                className="btnSecondary"
+                onClick={() => (auth ? signOut(auth) : null)}
+              >
+                로그아웃
+              </button>
+            </div>
+          </div>
+        ) : canUseApp ? (
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/plan" element={<PlanPage />} />
+            <Route path="/reflection" element={<ReflectionPage />} />
+            <Route path="/resources" element={<ResourcesPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        ) : null}
       </main>
 
       <Modal open={needsNickname} title="닉네임 설정" onClose={() => {}}>

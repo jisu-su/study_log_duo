@@ -143,6 +143,37 @@ export default function ResourcesPage() {
     }
   }
 
+  async function downloadFile(r: ResourceRow) {
+    if (!auth?.currentUser) return
+    setLoading(true)
+    setError(null)
+    try {
+      const token = await auth.currentUser.getIdToken()
+      const res = await fetch(
+        `${apiBase}/api/resources/${encodeURIComponent(r.id)}/file`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(text || `HTTP ${res.status}`)
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = r.title || 'download'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to download')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const canCreate = useMemo(() => {
     if (newType === 'link') return url.trim().startsWith('http') && (title.trim().length > 0 || url.trim().length > 0)
     if (newType === 'memo') return title.trim().length > 0
@@ -286,13 +317,14 @@ export default function ResourcesPage() {
                   ) : null}
                   {r.type === 'file' ? (
                     <div className="resourceLink">
-                      <a
-                        href={`${apiBase}/api/resources/${encodeURIComponent(r.id)}/file`}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        className="linkButton"
+                        type="button"
+                        onClick={() => downloadFile(r)}
+                        disabled={loading}
                       >
                         다운로드
-                      </a>
+                      </button>
                     </div>
                   ) : null}
                   {r.memo ? <div className="box">{r.memo}</div> : null}
