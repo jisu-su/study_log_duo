@@ -251,9 +251,13 @@ export default function HomePage() {
         <div className="muted">내 칸만 클릭해서 로그를 입력할 수 있습니다.</div>
 
         <div className="fishGrid" style={{ marginTop: 12 }}>
-          <div className="fishHead fishLeft">{displayUsers[0]?.id === meUid ? '나' : displayUsers[0]?.name ?? '나'}</div>
+          <div className="fishHead fishLeft">
+            <UserColumnTitle user={displayUsers[0]} meUid={meUid} dayOff={dayOffByUser.get(displayUsers[0]?.id ?? '')} />
+          </div>
           <div className="fishHead fishMid">시간</div>
-          <div className="fishHead fishRight">{displayUsers[1]?.id && displayUsers[1]?.id === meUid ? '나' : displayUsers[1]?.name ?? 'love'}</div>
+          <div className="fishHead fishRight">
+            <UserColumnTitle user={displayUsers[1]} meUid={meUid} dayOff={dayOffByUser.get(displayUsers[1]?.id ?? '')} />
+          </div>
 
           {timelineHours.map((h) => (
             <HomeFishRow
@@ -355,7 +359,7 @@ function HomeFishRow(props: {
     const isMe = uid === meUid
     const clickable = isMe && !isDayOff && !schedule && !isPlaceholder
 
-    const className = `fishCell ${side === 'left' ? 'fishLeft' : 'fishRight'} ${clickable ? 'clickable' : ''}`
+    const className = `fishCell ${side === 'left' ? 'fishLeft' : 'fishRight'} ${clickable ? 'clickable' : ''} ${isDayOff ? 'dayOffBlocked' : ''}`
     return (
       <div
         key={`${uid}-${hour}`}
@@ -365,9 +369,7 @@ function HomeFishRow(props: {
         tabIndex={clickable ? 0 : -1}
       >
         {isDayOff ? (
-          <span className="badgeOff">
-            휴무{dayOffByUser.get(uid)?.note ? ` · ${dayOffByUser.get(uid)!.note}` : ''}
-          </span>
+          <span className="muted"> </span>
         ) : schedule ? (
           <span className="badgeSchedule">📅 {schedule.title}</span>
         ) : r?.content ? (
@@ -387,5 +389,27 @@ function HomeFishRow(props: {
       </div>
       {right ? cell(right.id, 'right') : <div className="fishCell fishRight" />}
     </>
+  )
+}
+
+function UserColumnTitle(props: {
+  user: HomeUser | undefined
+  meUid: string | null
+  dayOff: DayOff | undefined
+}) {
+  const { user, meUid, dayOff } = props
+  if (!user) return <span>대기</span>
+  const isPlaceholder = user.id.startsWith('__placeholder_')
+  const name = isPlaceholder ? user.name : `${user.name}${user.id === meUid ? ' (나)' : ''}`
+
+  return (
+    <span className="columnTitle">
+      <span>{name}</span>
+      {dayOff ? (
+        <span className="miniOffBadge">
+          휴무{dayOff.note ? ` · ${dayOff.note}` : ''}
+        </span>
+      ) : null}
+    </span>
   )
 }

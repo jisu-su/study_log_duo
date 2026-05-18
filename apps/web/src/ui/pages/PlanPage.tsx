@@ -90,6 +90,20 @@ export default function PlanPage() {
     return users.find((u) => u.id !== myUid)?.id ?? null
   }, [users, myUid])
 
+  const displayUsers = useMemo(() => {
+    const base = [...users]
+    if (base.length === 0) {
+      return [
+        { id: '__placeholder_a', name: '(상대방 로그인 대기)', avatar_url: null, email: '' },
+        { id: '__placeholder_b', name: '(상대방 로그인 대기)', avatar_url: null, email: '' },
+      ]
+    }
+    if (base.length === 1) {
+      base.push({ id: '__placeholder_b', name: '(상대 로그인 대기)', avatar_url: null, email: '' })
+    }
+    return base.slice(0, 2)
+  }, [users])
+
   const timelineHours = useMemo(() => buildTimelineHours(6), [])
 
   const dayOffByUser = useMemo(() => {
@@ -401,16 +415,20 @@ export default function PlanPage() {
         <div className="muted">내 쪽은 클릭해서 입력/수정할 수 있습니다. (휴무/약속 시간은 입력 불가)</div>
 
         <div className="fishGrid" style={{ marginTop: 12 }}>
-          <div className="fishHead fishLeft">나</div>
+          <div className="fishHead fishLeft">
+            <UserColumnTitle user={displayUsers[0]} meUid={myUid} dayOff={dayOffByUser.get(displayUsers[0]?.id ?? '')} />
+          </div>
           <div className="fishHead fishMid">시간</div>
-          <div className="fishHead fishRight">love</div>
+          <div className="fishHead fishRight">
+            <UserColumnTitle user={displayUsers[1]} meUid={myUid} dayOff={dayOffByUser.get(displayUsers[1]?.id ?? '')} />
+          </div>
 
           {timelineHours.map((h) => (
             <FishRow
               key={h}
               hour={h}
-              myUid={myUid}
-              partnerUid={partnerUid}
+              users={displayUsers}
+              meUid={myUid}
               itemsByUserHour={itemsByUserHour}
               dayOffByUser={dayOffByUser}
               schedulesByUser={schedulesByUser}
@@ -514,62 +532,78 @@ function formatWeather(value: string | null): string {
 
 function FishRow(props: {
   hour: number
-  myUid: string | null
-  partnerUid: string | null
+  users: HomeUser[]
+  meUid: string | null
   itemsByUserHour: Map<string, Map<number, PlanItem>>
   dayOffByUser: Map<string, DayOff>
   schedulesByUser: Map<string, Schedule[]>
   onEdit: (hour: number) => void
 }) {
-  const { hour, myUid, partnerUid, itemsByUserHour, dayOffByUser, schedulesByUser, onEdit } = props
-  const myItem = myUid ? itemsByUserHour.get(myUid)?.get(hour) ?? null : null
-  const partnerItem = partnerUid ? itemsByUserHour.get(partnerUid)?.get(hour) ?? null : null
-
-  const myDayOff = myUid ? dayOffByUser.get(myUid) ?? null : null
-  const partnerDayOff = partnerUid ? dayOffByUser.get(partnerUid) ?? null : null
+  const { hour, users, meUid, itemsByUserHour, dayOffByUser, schedulesByUser, onEdit } = props
+  const left = users[0]
+  const right = users[1]
 
   const scheduleAt = (uid: string, h: number) =>
     (schedulesByUser.get(uid) ?? []).find((s) => s.start_hour <= h && s.end_hour > h) ?? null
 
-  const mySchedule = myUid ? scheduleAt(myUid, hour) : null
-  const partnerSchedule = partnerUid ? scheduleAt(partnerUid, hour) : null
+  function cell(user: HomeUser | undefined, side: 'left' | 'right') {
+    if (!user) return <div className={`fishCell ${side === 'left' ? 'fishLeft' : 'fishRight'}`} />
+    const isPlaceholder = user.id.startsWith('__placeholder_')
+    const item = itemsByUserHour.get(user.id)?.get(hour) ?? null
+    const dayOff = dayOffByUser.get(user.id) ?? null
+    const schedule = dayOff || isPlaceholder ? null : scheduleAt(user.id, hour)
+    const clickable = user.id === meUid && !dayOff && !schedule && !isPlaceholder
+    const className = `fishCell ${side === 'left' ? 'fishLeft' : 'fishRight'} ${clickable ? 'clickable' : ''} ${dayOff ? 'dayOffBlocked' : ''}`
 
-  const myClickable = Boolean(myUid && !myDayOff && !mySchedule)
+    return (
+      <div
+        className={className}
+        onClick={() => (clickable ? onEdit(hour) : null)}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : -1}
+      >
+        {dayOff ? (
+          <span className="muted"> </span>
+        ) : schedule ? (
+          <span className="badgeSchedule">📅 {schedule.title}</span>
+        ) : item ? (
+          <span className="content">{item.content}</span>
+        ) : (
+          <span className="muted"> </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <>
-      <div
-        className={`fishCell fishLeft ${myClickable ? 'clickable' : ''}`}
-        onClick={() => (myClickable ? onEdit(hour) : null)}
-        role={myClickable ? 'button' : undefined}
-        tabIndex={myClickable ? 0 : -1}
-      >
-        {myDayOff ? (
-          <span className="badgeOff">휴무</span>
-        ) : mySchedule ? (
-          <span className="badgeSchedule">📅 {mySchedule.title}</span>
-        ) : myItem ? (
-          <span className="content">{myItem.content}</span>
-        ) : (
-          <span className="muted"> </span>
-        )}
-      </div>
-
+      {cell(left, 'left')}
       <div className="fishCell fishMid">
         <span className="timeCol">{String(hour).padStart(2, '0')}:00</span>
       </div>
-
-      <div className="fishCell fishRight">
-        {partnerDayOff ? (
-          <span className="badgeOff">휴무</span>
-        ) : partnerSchedule ? (
-          <span className="badgeSchedule">📅 {partnerSchedule.title}</span>
-        ) : partnerItem ? (
-          <span className="content">{partnerItem.content}</span>
-        ) : (
-          <span className="muted"> </span>
-        )}
-      </div>
+      {cell(right, 'right')}
     </>
+  )
+}
+
+function UserColumnTitle(props: {
+  user: HomeUser | undefined
+  meUid: string | null
+  dayOff: DayOff | undefined
+}) {
+  const { user, meUid, dayOff } = props
+  if (!user) return <span>대기</span>
+  const isPlaceholder = user.id.startsWith('__placeholder_')
+  const name = isPlaceholder ? user.name : `${user.name}${user.id === meUid ? ' (나)' : ''}`
+
+  return (
+    <span className="columnTitle">
+      <span>{name}</span>
+      {dayOff ? (
+        <span className="miniOffBadge">
+          휴무{dayOff.note ? ` · ${dayOff.note}` : ''}
+        </span>
+      ) : null}
+    </span>
   )
 }

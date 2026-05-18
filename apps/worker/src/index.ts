@@ -206,7 +206,7 @@ app.get('/api/home', async (c) => {
   const users = await c.env.DB.prepare(
     `SELECT id, email, name, avatar_url, day_start_hour, name_locked
      FROM users
-     ORDER BY email ASC`,
+     ORDER BY created_at ASC, email ASC`,
   ).all()
 
   const timeLogs = await c.env.DB.prepare(
@@ -262,7 +262,7 @@ app.get('/api/time-logs', async (c) => {
      FROM users u
      LEFT JOIN time_logs t
        ON t.user_id = u.id AND t.logical_date = ?
-     ORDER BY u.email ASC, t.hour ASC`,
+     ORDER BY u.created_at ASC, u.email ASC, t.hour ASC`,
   )
     .bind(logicalDate)
     .all()
@@ -363,7 +363,7 @@ app.get('/api/day-offs', async (c) => {
      FROM users u
      LEFT JOIN day_offs d
        ON d.user_id = u.id AND d.logical_date = ?
-     ORDER BY u.email ASC`,
+     ORDER BY u.created_at ASC, u.email ASC`,
   )
     .bind(logicalDate)
     .all()
@@ -430,7 +430,7 @@ app.get('/api/schedules', async (c) => {
      FROM schedules s
      JOIN users u ON u.id = s.user_id
      WHERE s.logical_date = ?
-     ORDER BY u.email ASC, s.start_hour ASC`,
+     ORDER BY u.created_at ASC, u.email ASC, s.start_hour ASC`,
   )
     .bind(logicalDate)
     .all()
@@ -508,7 +508,7 @@ app.get('/api/plans', async (c) => {
      FROM users u
      LEFT JOIN plans p
        ON p.user_id = u.id AND p.logical_date = ?
-     ORDER BY u.email ASC`,
+     ORDER BY u.created_at ASC, u.email ASC`,
   )
     .bind(logicalDate)
     .all()
@@ -721,7 +721,7 @@ app.get('/api/reflections', async (c) => {
      FROM users u
      LEFT JOIN reflections r
        ON r.user_id = u.id AND r.logical_date = ?
-     ORDER BY u.email ASC`,
+     ORDER BY u.created_at ASC, u.email ASC`,
   )
     .bind(logicalDate)
     .all()
@@ -840,15 +840,28 @@ app.put('/api/reactions', async (c) => {
     picture: token.picture ? String(token.picture) : undefined,
   })
 
+  const existing = await c.env.DB.prepare(
+    `SELECT id FROM reactions
+     WHERE reflection_id = ? AND user_id = ? AND emoji = ?`,
+  )
+    .bind(reflectionId, String(token.uid), emoji)
+    .first()
+
+  if (existing) {
+    await c.env.DB.prepare(`DELETE FROM reactions WHERE id = ?`)
+      .bind((existing as any).id)
+      .run()
+    return c.json({ ok: true, active: false })
+  }
+
   await c.env.DB.prepare(
     `INSERT INTO reactions (id, reflection_id, user_id, emoji)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(reflection_id, user_id, emoji) DO NOTHING`,
+     VALUES (?, ?, ?, ?)`,
   )
     .bind(crypto.randomUUID(), reflectionId, String(token.uid), emoji)
     .run()
 
-  return c.json({ ok: true })
+  return c.json({ ok: true, active: true })
 })
 
 function parseTags(input: any): string | null {
