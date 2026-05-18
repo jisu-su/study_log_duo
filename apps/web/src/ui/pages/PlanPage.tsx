@@ -397,7 +397,7 @@ export default function PlanPage() {
       </div>
 
       <div className="card">
-        <h3>시간별 계획(생선가시)</h3>
+        <h3>시간별 계획</h3>
         <div className="muted">내 쪽은 클릭해서 입력/수정할 수 있습니다. (휴무/약속 시간은 입력 불가)</div>
 
         <div className="fishGrid" style={{ marginTop: 12 }}>
