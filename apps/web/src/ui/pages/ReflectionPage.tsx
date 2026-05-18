@@ -181,7 +181,7 @@ export default function ReflectionPage() {
         {error ? <div className="error">{error}</div> : null}
         {!auth?.currentUser ? (
           <div className="muted" style={{ marginTop: 8 }}>
-            상단의 Google 로그인 후 사용 가능해.
+            상단의 Google 로그인 후 사용 가능합니다.
           </div>
         ) : null}
       </div>
@@ -230,7 +230,7 @@ export default function ReflectionPage() {
           <div className="card">
             <h3>내 회고 카드</h3>
             {!myReflection?.reflection_id ? (
-              <div className="muted">아직 저장된 내 회고가 없어.</div>
+              <div className="muted">아직 저장된 내 회고가 없습니다.</div>
             ) : (
               <ReflectionCard
                 reflection={myReflection}
@@ -243,7 +243,7 @@ export default function ReflectionPage() {
           <div className="card">
             <h3>상대 회고</h3>
           {!partnerReflection?.reflection_id ? (
-            <div className="muted">상대가 아직 회고를 작성하지 않았어.</div>
+            <div className="muted">상대가 아직 회고를 작성하지 않았습니다.</div>
           ) : (
             <>
               <ReflectionCard reflection={partnerReflection} reactions={reactionsForPartner} />

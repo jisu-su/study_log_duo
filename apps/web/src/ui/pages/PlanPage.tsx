@@ -258,7 +258,7 @@ export default function PlanPage() {
         {error ? <div className="error">{error}</div> : null}
         {!auth?.currentUser ? (
           <div className="muted" style={{ marginTop: 8 }}>
-            상단의 Google 로그인 후 사용 가능해.
+            상단의 Google 로그인 후 사용 가능합니다.
           </div>
         ) : null}
       </div>
@@ -321,7 +321,7 @@ export default function PlanPage() {
         <div className="card">
           <h3>상대 하루 상태</h3>
           {!partnerPlan ? (
-            <div className="muted">상대가 아직 상태를 저장하지 않았어.</div>
+            <div className="muted">상대가 아직 상태를 저장하지 않았습니다.</div>
           ) : (
             <div className="box">
               <div className="boxRow">
@@ -343,12 +343,12 @@ export default function PlanPage() {
 
       <div className="card">
         <h3>시간별 계획(생선가시)</h3>
-        <div className="muted">내 쪽은 클릭해서 입력/수정할 수 있어. (휴무/약속 시간은 입력 불가)</div>
+        <div className="muted">내 쪽은 클릭해서 입력/수정할 수 있습니다. (휴무/약속 시간은 입력 불가)</div>
 
         <div className="fishGrid" style={{ marginTop: 12 }}>
           <div className="fishHead fishLeft">나</div>
           <div className="fishHead fishMid">시간</div>
-          <div className="fishHead fishRight">동기</div>
+          <div className="fishHead fishRight">love</div>
 
           {timelineHours.map((h) => (
             <FishRow

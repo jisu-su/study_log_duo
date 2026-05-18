@@ -163,7 +163,7 @@ export default function SettingsPage() {
         <div className="homeHeader">
           <div>
             <h2>설정</h2>
-            <div className="muted">휴무와 약속은 각각 날짜를 따로 골라 관리해.</div>
+            <div className="muted">휴무와 약속은 각각 날짜를 따로 골라 관리합니다.</div>
           </div>
         </div>
         {error ? <div className="error">{error}</div> : null}
@@ -173,7 +173,7 @@ export default function SettingsPage() {
         <div className="homeHeader">
           <div>
             <h3>휴무</h3>
-            <div className="muted">휴무면 홈 타임라인에서 하루 종일 “휴무”로 표시돼.</div>
+            <div className="muted">휴무면 홈 타임라인에서 하루 종일 “휴무”로 표시됩니다.</div>
           </div>
           <div className="actions">
             <label className="label" style={{ gap: 4 }}>
@@ -227,7 +227,7 @@ export default function SettingsPage() {
         <div className="homeHeader">
           <div>
             <h3>약속</h3>
-            <div className="muted">해당 시간대는 홈에서 “📅 약속”으로 표시되고 로그 입력이 막혀.</div>
+            <div className="muted">해당 시간대는 홈에서 “📅 약속”으로 표시되고 로그 입력이 막힙니다.</div>
           </div>
           <div className="actions">
             <label className="label" style={{ gap: 4 }}>
@@ -291,7 +291,7 @@ export default function SettingsPage() {
 
         <div style={{ marginTop: 14 }}>
           {scheduleRows.length === 0 ? (
-            <div className="muted">등록된 약속이 없어.</div>
+            <div className="muted">등록된 약속이 없습니다.</div>
           ) : (
             <div className="list">
               {scheduleRows.map((s) => (
@@ -318,7 +318,7 @@ export default function SettingsPage() {
       <div className="card">
         <h3>알림 설정</h3>
         <div className="muted">
-          정시마다 로그 기록이 없으면 알림을 보내줘. (PWA 홈 화면 추가 필수)
+          정시마다 로그 기록이 없으면 알림을 보냅니다. (PWA 홈 화면 추가 필수)
         </div>
         <div className="modalActions" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
           <button
@@ -330,7 +330,7 @@ export default function SettingsPage() {
           </button>
         </div>
         <div className="hint" style={{ marginTop: 8 }}>
-          iOS 사용자는 반드시 <strong>Safari</strong>의 [홈 화면에 추가] 기능을 사용해야 알림을 받을 수 있어.
+          iOS 사용자는 반드시 <strong>Safari</strong>의 [홈 화면에 추가] 기능을 사용해야 알림을 받을 수 있습니다.
         </div>
       </div>
     </div>

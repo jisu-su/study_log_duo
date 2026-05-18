@@ -140,8 +140,8 @@ export default function HomePage() {
     const base = [...users]
     if (base.length === 0) {
       return [
-        { id: '__placeholder_a', name: '(A 로그인 대기)', avatar_url: null, email: '' },
-        { id: '__placeholder_b', name: '(B 로그인 대기)', avatar_url: null, email: '' },
+        { id: '__placeholder_a', name: '(상대방 로그인 대기)', avatar_url: null, email: '' },
+        { id: '__placeholder_b', name: '(상대방 로그인 대기)', avatar_url: null, email: '' },
       ]
     }
     if (base.length === 1) {
@@ -192,7 +192,7 @@ export default function HomePage() {
     return (
       <div className="card">
         <h2>홈</h2>
-        <p>Firebase 설정이 비어있어요. `apps/web/.env.local`을 채운 뒤 다시 실행해줘.</p>
+        <p>Firebase 설정이 비어있어요. `apps/web/.env.local`을 채운 뒤 다시 실행해주세요.</p>
       </div>
     )
   }
@@ -236,24 +236,24 @@ export default function HomePage() {
         {error ? <div className="error">{error}</div> : null}
         {!auth?.currentUser ? (
           <div className="muted" style={{ marginTop: 8 }}>
-            상단의 Google 로그인 후 사용 가능해.
+            상단의 Google 로그인 후 사용 가능합니다.
           </div>
         ) : null}
         {users.length < 2 && auth?.currentUser ? (
           <div className="muted" style={{ marginTop: 8 }}>
-            상대가 아직 로그인 전이야. 두 사람 모두 한 번씩 로그인하면 홈이 2열로 완성돼.
+            상대가 아직 로그인 전입니다. 두 사람 모두 한 번씩 로그인하면 홈이 2열로 완성됩니다.
           </div>
         ) : null}
       </div>
 
       <div className="card">
-        <h3>타임라인(생선가시)</h3>
-        <div className="muted">내 칸만 클릭해서 로그를 입력할 수 있어.</div>
+        <h3>타임라인</h3>
+        <div className="muted">내 칸만 클릭해서 로그를 입력할 수 있습니다.</div>
 
         <div className="fishGrid" style={{ marginTop: 12 }}>
           <div className="fishHead fishLeft">{displayUsers[0]?.id === meUid ? '나' : displayUsers[0]?.name ?? '나'}</div>
           <div className="fishHead fishMid">시간</div>
-          <div className="fishHead fishRight">{displayUsers[1]?.id && displayUsers[1]?.id === meUid ? '나' : displayUsers[1]?.name ?? '동기'}</div>
+          <div className="fishHead fishRight">{displayUsers[1]?.id && displayUsers[1]?.id === meUid ? '나' : displayUsers[1]?.name ?? 'love'}</div>
 
           {timelineHours.map((h) => (
             <HomeFishRow

@@ -1,5 +1,5 @@
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : { title: 'StudyLog', body: '새로운 알림이 있습니다.' };
+  const data = event.data ? event.data.json() : { title: 'duoingsu', body: '새로운 알림이 있습니다.' };
   
   const options = {
     body: data.body,

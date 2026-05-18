@@ -109,7 +109,7 @@ export default function App() {
             <h2>설정 필요</h2>
             <p className="muted">
               Pages 환경변수 `VITE_API_BASE_URL`이 비어있어서 API 호출이 Pages로 가고,
-              결과가 `Not Implemented`로 보일 수 있어.
+              결과가 `Not Implemented`로 보일 수 있습니다.
             </p>
           </div>
         ) : null}
@@ -118,7 +118,7 @@ export default function App() {
             <h2>설정 필요</h2>
             <p className="muted">
               Firebase 웹앱 환경변수(`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`,
-              `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`)가 비어있어서 앱을 실행할 수 없어.
+              `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`)가 비어있어서 앱을 실행할 수 없습니다.
             </p>
           </div>
         ) : null}

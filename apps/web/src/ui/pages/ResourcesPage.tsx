@@ -187,7 +187,7 @@ export default function ResourcesPage() {
         <div className="homeHeader">
           <div>
             <h2>자료 공유</h2>
-            <div className="muted">링크/파일/메모를 공유하고 핀 고정할 수 있어.</div>
+            <div className="muted">링크/파일/메모를 공유하고 핀 고정할 수 있습니다.</div>
           </div>
           <div className="actions">
             <input
@@ -204,7 +204,7 @@ export default function ResourcesPage() {
         {error ? <div className="error">{error}</div> : null}
         {!auth?.currentUser ? (
           <div className="muted" style={{ marginTop: 8 }}>
-            상단의 Google 로그인 후 사용 가능해.
+            상단의 Google 로그인 후 사용 가능합니다.
           </div>
         ) : null}
       </div>
@@ -294,7 +294,7 @@ export default function ResourcesPage() {
         </div>
 
         {rows.length === 0 ? (
-          <div className="muted">아직 공유된 자료가 없어.</div>
+          <div className="muted">아직 공유된 자료가 없습니다.</div>
         ) : (
           <div className="list" style={{ marginTop: 10 }}>
             {rows.map((r) => (
