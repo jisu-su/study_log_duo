@@ -126,14 +126,14 @@ export default function App() {
           <div className="publicHome">
             <div className="publicPanel">
               <h1>duoingsu</h1>
-              <p>둘만의 스터디 기록 공간을 불러오는 중이야.</p>
+              <p>둘만의 스터디 기록 공간을 불러오는 중입니다.</p>
             </div>
           </div>
         ) : !authUser ? (
           <div className="publicHome">
             <div className="publicPanel">
               <h1>duoingsu</h1>
-              <p>허용된 두 사람만 사용할 수 있는 비공개 스터디 로그야.</p>
+              <p>허용된 사람만 사용할 수 있는 비공개 스터디 로그입니다.</p>
               <button
                 className="btn"
                 onClick={() => (auth ? signInWithPopup(auth, googleProvider) : null)}
@@ -146,8 +146,8 @@ export default function App() {
         ) : meError && !me ? (
           <div className="publicHome">
             <div className="publicPanel">
-              <h1>접근할 수 없어</h1>
-              <p>허용된 계정으로 로그인했는지 확인해줘.</p>
+              <h1>접근할 수 없습니다.</h1>
+              <p>허용된 계정으로 로그인했는지 확인해주세요.</p>
               <button
                 className="btnSecondary"
                 onClick={() => (auth ? signOut(auth) : null)}
@@ -170,7 +170,7 @@ export default function App() {
       <Modal open={needsNickname} title="닉네임 설정" onClose={() => {}}>
         <div className="form">
           <div className="muted">
-            첫 로그인 1회만 설정 가능!! 신중하게 레츠고 (2~12자)
+            첫 로그인 시 1회만 설정 가능! 신중하게 만들기 (2~12자)
           </div>
           <label className="label">
             닉네임
