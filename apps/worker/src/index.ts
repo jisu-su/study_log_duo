@@ -567,6 +567,71 @@ app.put('/api/plans', async (c) => {
   return c.json({ ok: true })
 })
 
+app.get('/api/plan-cheers', async (c) => {
+  const logicalDate = c.req.query('logicalDate')
+  if (!logicalDate) return c.json({ error: 'logicalDate is required' }, 400)
+
+  const rows = await c.env.DB.prepare(
+    `SELECT pc.id, pc.plan_user_id, pc.user_id, u.name AS user_name,
+            pc.logical_date, pc.content, pc.updated_at
+     FROM plan_cheers pc
+     JOIN users u ON u.id = pc.user_id
+     WHERE pc.logical_date = ?
+     ORDER BY pc.updated_at DESC`,
+  )
+    .bind(logicalDate)
+    .all()
+
+  return c.json({ logicalDate, rows: rows.results })
+})
+
+app.put('/api/plan-cheers', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  const body = (await c.req.json().catch(() => null)) as any
+  if (!body) return c.json({ error: 'Invalid JSON' }, 400)
+
+  const logicalDate = String(body.logicalDate ?? '')
+  const planUserId = String(body.planUserId ?? '')
+  const content = String(body.content ?? '').trim()
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(logicalDate)) {
+    return c.json({ error: 'Invalid logicalDate' }, 400)
+  }
+  if (!planUserId) return c.json({ error: 'planUserId is required' }, 400)
+  if (!content || content.length > 80) return c.json({ error: 'Invalid content' }, 400)
+  if (planUserId === String(token.uid)) {
+    return c.json({ error: 'Cannot cheer your own plan' }, 400)
+  }
+
+  const target = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ?`)
+    .bind(planUserId)
+    .first()
+  if (!target) return c.json({ error: 'Target user not found' }, 404)
+
+  await ensureUser(c.env, {
+    uid: String(token.uid),
+    email: String(token.email),
+    name: (token as any).name ? String((token as any).name) : undefined,
+    picture: token.picture ? String(token.picture) : undefined,
+  })
+
+  const id = crypto.randomUUID()
+  const nowIso = new Date().toISOString()
+
+  await c.env.DB.prepare(
+    `INSERT INTO plan_cheers (id, plan_user_id, user_id, logical_date, content, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(plan_user_id, user_id, logical_date) DO UPDATE SET
+       content = excluded.content,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(id, planUserId, String(token.uid), logicalDate, content, nowIso)
+    .run()
+
+  return c.json({ ok: true })
+})
+
 app.get('/api/plan-items', async (c) => {
   const logicalDate = c.req.query('logicalDate')
   if (!logicalDate) return c.json({ error: 'logicalDate is required' }, 400)

@@ -48,6 +48,16 @@ type PlanItem = {
   created_at: string
 }
 
+type PlanCheer = {
+  id: string
+  plan_user_id: string
+  user_id: string
+  user_name: string
+  logical_date: string
+  content: string
+  updated_at: string
+}
+
 const weatherOptions = [
   { value: 'sunny', label: '☀️ sunny' },
   { value: 'cloudy', label: '⛅ cloudy' },
@@ -68,6 +78,7 @@ export default function PlanPage() {
   const [users, setUsers] = useState<HomeUser[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [items, setItems] = useState<PlanItem[]>([])
+  const [cheers, setCheers] = useState<PlanCheer[]>([])
   const [dayOffs, setDayOffs] = useState<DayOff[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(false)
@@ -115,6 +126,7 @@ export default function PlanPage() {
   const [goal, setGoal] = useState('')
   const [condition, setCondition] = useState<number | null>(3)
   const [weather, setWeather] = useState<string | null>('sunny')
+  const [cheerContent, setCheerContent] = useState('')
 
   useEffect(() => {
     if (!myPlan) return
@@ -138,6 +150,11 @@ export default function PlanPage() {
         `/api/plan-items?logicalDate=${encodeURIComponent(logicalDate)}`,
       )
       setItems(i.rows)
+
+      const cheerData = await apiFetch<{ logicalDate: string; rows: PlanCheer[] }>(
+        `/api/plan-cheers?logicalDate=${encodeURIComponent(logicalDate)}`,
+      )
+      setCheers(cheerData.rows)
     } catch (e: any) {
       setError(e?.message ?? 'Failed to load plan')
     } finally {
@@ -167,6 +184,28 @@ export default function PlanPage() {
       await refresh()
     } catch (e: any) {
       setError(e?.message ?? 'Failed to save plan')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function saveCheer() {
+    if (!auth?.currentUser || !partnerUid) return
+    setLoading(true)
+    setError(null)
+    try {
+      await apiFetch('/api/plan-cheers', {
+        method: 'PUT',
+        body: JSON.stringify({
+          logicalDate,
+          planUserId: partnerUid,
+          content: cheerContent.trim(),
+        }),
+      })
+      setCheerContent('')
+      await refresh()
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to save cheer')
     } finally {
       setLoading(false)
     }
@@ -236,6 +275,15 @@ export default function PlanPage() {
 
   const myDayOff = myUid ? dayOffByUser.get(myUid) ?? null : null
   const partnerDayOff = partnerUid ? dayOffByUser.get(partnerUid) ?? null : null
+  const cheersForMine = useMemo(
+    () => (myUid ? cheers.filter((c) => c.plan_user_id === myUid) : []),
+    [cheers, myUid],
+  )
+  const cheersForPartner = useMemo(
+    () => (partnerUid ? cheers.filter((c) => c.plan_user_id === partnerUid) : []),
+    [cheers, partnerUid],
+  )
+  const canSaveCheer = Boolean(partnerUid && cheerContent.trim().length > 0 && cheerContent.trim().length <= 80)
 
   return (
     <div className="stack">
@@ -279,7 +327,7 @@ export default function PlanPage() {
 
       <div className="twoCol">
         <div className="card">
-          <h3>내 하루 상태</h3>
+          <h3>내 하루 상태 입력</h3>
           <div className="row" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="label">
               컨디션(1~5)
@@ -318,26 +366,33 @@ export default function PlanPage() {
           </div>
         </div>
 
-        <div className="card">
-          <h3>상대 하루 상태</h3>
-          {!partnerPlan ? (
-            <div className="muted">상대가 아직 상태를 저장하지 않았습니다.</div>
-          ) : (
-            <div className="box">
-              <div className="boxRow">
-                <div className="boxKey">컨디션</div>
-                <div className="boxVal">{partnerPlan.condition ?? '-'}</div>
-              </div>
-              <div className="boxRow">
-                <div className="boxKey">날씨</div>
-                <div className="boxVal">{partnerPlan.weather ?? '-'}</div>
-              </div>
-              <div className="boxRow">
-                <div className="boxKey">목표</div>
-                <div className="boxVal">{partnerPlan.goal ?? '-'}</div>
-              </div>
-            </div>
-          )}
+        <div className="stack">
+          <PlanStatusCard title="내 하루 상태" plan={myPlan} cheers={cheersForMine} />
+          <PlanStatusCard title="상대 하루 상태" plan={partnerPlan} cheers={cheersForPartner} />
+          <div className="card">
+            <h3>응원 한 줄</h3>
+            {!partnerUid ? (
+              <div className="muted">상대가 아직 로그인하지 않았습니다.</div>
+            ) : (
+              <>
+                <label className="label">
+                  상대에게 남길 응원(80자)
+                  <input
+                    className="textInput"
+                    value={cheerContent}
+                    onChange={(e) => setCheerContent(e.target.value)}
+                    maxLength={80}
+                    placeholder="예: 오늘 목표 좋다. 같이 밀어보자!"
+                  />
+                </label>
+                <div className="modalActions" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
+                  <button className="btn" onClick={saveCheer} disabled={loading || !canSaveCheer}>
+                    응원 저장
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -394,6 +449,67 @@ export default function PlanPage() {
       </Modal>
     </div>
   )
+}
+
+function PlanStatusCard(props: {
+  title: string
+  plan: Plan | null
+  cheers: PlanCheer[]
+}) {
+  const { title, plan, cheers } = props
+
+  return (
+    <div className="card">
+      <h3>{title}</h3>
+      {!plan ? (
+        <div className="muted">아직 상태를 저장하지 않았습니다.</div>
+      ) : (
+        <div className="box">
+          <div className="boxRow">
+            <div className="boxKey">컨디션</div>
+            <div className="boxVal">{formatCondition(plan.condition)}</div>
+          </div>
+          <div className="boxRow">
+            <div className="boxKey">날씨</div>
+            <div className="boxVal">{formatWeather(plan.weather)}</div>
+          </div>
+          <div className="boxRow">
+            <div className="boxKey">목표</div>
+            <div className="boxVal">{plan.goal ?? '-'}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="sectionTitle" style={{ marginTop: 10 }}>
+        응원
+      </div>
+      {cheers.length === 0 ? (
+        <div className="muted">아직 응원이 없습니다.</div>
+      ) : (
+        <div className="cheerList">
+          {cheers.map((c) => (
+            <div key={c.id} className="cheerItem">
+              <strong>{c.user_name}</strong>
+              <span>{c.content}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatCondition(value: number | null): string {
+  if (value === 1) return '😴 낮음'
+  if (value === 2) return '😞 조금 낮음'
+  if (value === 3) return '😐 보통'
+  if (value === 4) return '😊 좋음'
+  if (value === 5) return '🔥 높음'
+  return '-'
+}
+
+function formatWeather(value: string | null): string {
+  return weatherOptions.find((w) => w.value === value)?.label ?? '-'
 }
 
 function FishRow(props: {
@@ -457,4 +573,3 @@ function FishRow(props: {
     </>
   )
 }
-
