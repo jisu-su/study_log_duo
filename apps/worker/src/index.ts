@@ -75,52 +75,64 @@ app.get('/api/health', async (c) => {
       hasR2: Boolean(c.env.R2),
       hasFirebaseProjectId: Boolean(c.env.FIREBASE_PROJECT_ID),
       hasAllowedEmails: Boolean(c.env.ALLOWED_EMAILS),
+      hasJwkCacheKv: Boolean(c.env.PUBLIC_JWK_CACHE_KV),
     },
   })
 })
 
-// 82번 라인부터 시작 (app.use('/api/*', ...) 세 덩어리를 아래 내용으로 교환)
+app.use('/api/*', async (c, next) => {
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
+  
+  const authz = c.req.header('authorization') || c.req.header('Authorization') || ''
+  if (!authz.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized', message: 'Missing Bearer Token' }, 401)
+  }
+
+  const projectId = c.env.FIREBASE_PROJECT_ID
+  if (!projectId) {
+    return c.json({ error: 'Config Error', message: 'Missing FIREBASE_PROJECT_ID' }, 500)
+  }
+
+  if (!c.env.PUBLIC_JWK_CACHE_KV) {
+    return c.json(
+      {
+        error: 'Config Error',
+        message: 'Missing PUBLIC_JWK_CACHE_KV binding for @hono/firebase-auth',
+      },
+      500,
+    )
+  }
+
+  return next()
+})
+
+app.use('/api/*', (c, next) => {
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
+  return verifyFirebaseAuth({
+    projectId: c.env.FIREBASE_PROJECT_ID,
+    disableErrorLog: true,
+  })(c, next)
+})
 
 app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return await next();
-  
-  const authz = c.req.header('authorization') || c.req.header('Authorization') || '';
-  if (!authz.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized', message: 'Missing Bearer Token' }, 401);
+  if (c.req.path === '/api/health' || c.req.method === 'OPTIONS') return next()
+
+  const token = getFirebaseToken(c)
+  const email = (token?.email || '').toLowerCase().trim()
+  const allowedList = (c.env.ALLOWED_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+
+  if (!email || !allowedList.includes(email)) {
+    return c.json({
+      error: 'Unauthorized',
+      message: `Email(${email || 'unknown'}) is not in the whitelist.`,
+    }, 403)
   }
 
-  const projectId = c.env.FIREBASE_PROJECT_ID;
-  if (!projectId) {
-    return c.json({ error: 'Internal Server Error', message: 'Missing FIREBASE_PROJECT_ID' }, 500);
-  }
-
-  try {
-    // 1. Verify Firebase Auth
-    const authMiddleware = verifyFirebaseAuth({ projectId });
-    const response = await authMiddleware(c, next);
-    
-    // If verifyFirebaseAuth returns a response (like 401), return it immediately
-    if (response instanceof Response) return response;
-
-    // 2. Check Whitelist
-    const token = getFirebaseToken(c);
-    const email = (token?.email || '').toLowerCase().trim();
-    const allowedStr = c.env.ALLOWED_EMAILS || '';
-    const allowedList = allowedStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
-    if (!email || !allowedList.includes(email)) {
-      console.error(`Access Denied for email: "${email}". Allowed: ${allowedList.join(', ')}`);
-      return c.json({ 
-        error: 'Unauthorized', 
-        message: `Email(${email || 'unknown'}) is not in the whitelist.` 
-      }, 403);
-    }
-  } catch (err: any) {
-    console.error('Auth Middleware Error:', err);
-    return c.json({ error: 'Authentication Error', message: err.message }, 500);
-  }
-});
-
+  await next()
+})
 
 app.get('/api/me', async (c) => {
   const token = getFirebaseToken(c)

@@ -6,9 +6,16 @@ compatibility_flags = [ "nodejs_compat" ]
 [vars]
 CORS_ORIGIN = "https://duoingsu.pages.dev"
 FIREBASE_PROJECT_ID = "studuo-fa42b"
+PUBLIC_JWK_CACHE_KEY = "verify-firebase-auth-cached-public-key"
 # Do not commit real emails. Override via `wrangler secret put ALLOWED_EMAILS`
 # and/or `apps/worker/.dev.vars` for local dev.
 # For production, set this to your Pages origin (e.g. https://duoingsu.pages.dev).
+
+# @hono/firebase-auth requires a KV binding for Firebase public JWK caching.
+# After creating the KV namespace, add:
+# [[kv_namespaces]]
+# binding = "PUBLIC_JWK_CACHE_KV"
+# id = "cba05deb04ab4d55a6c9e7a50276d96e"
 
 [observability.logs]
 enabled = true
