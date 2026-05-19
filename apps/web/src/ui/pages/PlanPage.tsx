@@ -36,9 +36,19 @@ type Plan = {
 type HomePayload = {
   logicalDate: string
   users: HomeUser[]
+  timeLogs: TimeLog[]
   dayOffs: DayOff[]
   schedules: Schedule[]
   plans: Plan[]
+}
+
+type TimeLog = {
+  user_id: string
+  hour: number
+  content: string
+  tag: string | null
+  focus_level: number | null
+  updated_at: string | null
 }
 
 type PlanItem = {
@@ -78,6 +88,7 @@ export default function PlanPage() {
   const [users, setUsers] = useState<HomeUser[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [items, setItems] = useState<PlanItem[]>([])
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([])
   const [cheers, setCheers] = useState<PlanCheer[]>([])
   const [dayOffs, setDayOffs] = useState<DayOff[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
@@ -131,6 +142,15 @@ export default function PlanPage() {
     return map
   }, [items])
 
+  const logsByUserHour = useMemo(() => {
+    const map = new Map<string, Map<number, TimeLog>>()
+    for (const log of timeLogs) {
+      if (!map.has(log.user_id)) map.set(log.user_id, new Map())
+      map.get(log.user_id)!.set(log.hour, log)
+    }
+    return map
+  }, [timeLogs])
+
   const myPlan = useMemo(() => (myUid ? plans.find((p) => p.user_id === myUid) ?? null : null), [plans, myUid])
   const partnerPlan = useMemo(
     () => (partnerUid ? plans.find((p) => p.user_id === partnerUid) ?? null : null),
@@ -157,6 +177,7 @@ export default function PlanPage() {
       const home = await apiFetch<HomePayload>(`/api/home?logicalDate=${encodeURIComponent(logicalDate)}`)
       setUsers(home.users)
       setPlans(home.plans)
+      setTimeLogs(home.timeLogs)
       setDayOffs(home.dayOffs)
       setSchedules(home.schedules)
 
@@ -448,6 +469,43 @@ export default function PlanPage() {
         </div>
       </div>
 
+      <div className="card">
+        <h3>계획 vs 실적</h3>
+        <div className="muted">시간대별로 계획과 실제 홈 로그를 함께 확인할 수 있습니다.</div>
+
+        <div className="compareGrid" style={{ marginTop: 12 }}>
+          <div className="compareHead compareTime">시간</div>
+          <div className="compareHead">
+            <UserColumnTitle
+              user={displayUsers[0]}
+              meUid={myUid}
+              dayOff={dayOffByUser.get(displayUsers[0]?.id ?? '')}
+              side="right"
+            />
+          </div>
+          <div className="compareHead">
+            <UserColumnTitle
+              user={displayUsers[1]}
+              meUid={myUid}
+              dayOff={dayOffByUser.get(displayUsers[1]?.id ?? '')}
+              side="right"
+            />
+          </div>
+
+          {timelineHours.map((h) => (
+            <CompareRow
+              key={h}
+              hour={h}
+              users={displayUsers}
+              itemsByUserHour={itemsByUserHour}
+              logsByUserHour={logsByUserHour}
+              dayOffByUser={dayOffByUser}
+              schedulesByUser={schedulesByUser}
+            />
+          ))}
+        </div>
+      </div>
+
       <Modal open={editOpen} title={editHour == null ? '계획 입력' : `${editHour}:00 계획 입력`} onClose={() => setEditOpen(false)}>
         <div className="form">
           <label className="label">
@@ -477,6 +535,94 @@ export default function PlanPage() {
       </Modal>
     </div>
   )
+}
+
+function CompareRow(props: {
+  hour: number
+  users: HomeUser[]
+  itemsByUserHour: Map<string, Map<number, PlanItem>>
+  logsByUserHour: Map<string, Map<number, TimeLog>>
+  dayOffByUser: Map<string, DayOff>
+  schedulesByUser: Map<string, Schedule[]>
+}) {
+  const { hour, users, itemsByUserHour, logsByUserHour, dayOffByUser, schedulesByUser } = props
+
+  return (
+    <>
+      <div className="compareCell compareTime">
+        <span className="timeCol">{String(hour).padStart(2, '0')}:00</span>
+      </div>
+      {users.slice(0, 2).map((user) => (
+        <CompareCell
+          key={`${user.id}-${hour}`}
+          hour={hour}
+          user={user}
+          planItem={itemsByUserHour.get(user.id)?.get(hour) ?? null}
+          timeLog={logsByUserHour.get(user.id)?.get(hour) ?? null}
+          dayOff={dayOffByUser.get(user.id) ?? null}
+          schedule={(schedulesByUser.get(user.id) ?? []).find((s) => s.start_hour <= hour && s.end_hour > hour) ?? null}
+        />
+      ))}
+    </>
+  )
+}
+
+function CompareCell(props: {
+  hour: number
+  user: HomeUser
+  planItem: PlanItem | null
+  timeLog: TimeLog | null
+  dayOff: DayOff | null
+  schedule: Schedule | null
+}) {
+  const { user, planItem, timeLog, dayOff, schedule } = props
+  const isPlaceholder = user.id.startsWith('__placeholder_')
+
+  if (isPlaceholder) {
+    return <div className="compareCell muted">상대방 로그인을 기다리고 있습니다.</div>
+  }
+
+  if (dayOff) {
+    return (
+      <div className="compareCell compareMuted">
+        <span className="badgeOff">휴무{dayOff.note ? ` · ${dayOff.note}` : ''}</span>
+      </div>
+    )
+  }
+
+  if (schedule) {
+    return (
+      <div className="compareCell compareMuted">
+        <span className="badgeSchedule">📅 {schedule.title}</span>
+      </div>
+    )
+  }
+
+  const status = getCompareStatus(planItem, timeLog)
+
+  return (
+    <div className={`compareCell ${status.className}`}>
+      <div className="compareStatus">{status.label}</div>
+      <div className="comparePair">
+        <div className="compareKey">계획</div>
+        <div className="compareVal">{planItem?.content || '-'}</div>
+      </div>
+      <div className="comparePair">
+        <div className="compareKey">실적</div>
+        <div className="compareVal">{timeLog?.content || '-'}</div>
+      </div>
+    </div>
+  )
+}
+
+function getCompareStatus(planItem: PlanItem | null, timeLog: TimeLog | null): {
+  label: string
+  className: string
+} {
+  if (planItem && timeLog) return { label: '계획/실적 있음', className: 'compareDone' }
+  if (planItem && !timeLog) return { label: '실적 대기', className: 'comparePlanned' }
+  if (!planItem && timeLog) return { label: '계획 외 실적', className: 'compareActualOnly' }
+  return { label: '비어 있음', className: 'compareEmpty' }
 }
 
 function PlanStatusCard(props: {
