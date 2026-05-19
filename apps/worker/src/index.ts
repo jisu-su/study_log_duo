@@ -1180,15 +1180,30 @@ app.post('/api/notifications/subscribe', async (c) => {
   const token = getFirebaseToken(c)
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
   const body = (await c.req.json().catch(() => null)) as any
-  if (!body?.subscription) return c.json({ error: 'subscription is required' }, 400)
+  if (!body?.subscription || !body.subscription.endpoint) return c.json({ error: 'subscription is required' }, 400)
+
+  const id = crypto.randomUUID()
+  const endpoint = body.subscription.endpoint
+  const p256dh = body.subscription.keys?.p256dh || ''
+  const auth = body.subscription.keys?.auth || ''
 
   await c.env.DB.prepare(
-    `UPDATE users SET push_subscription = ? WHERE id = ?`,
+    `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET
+       user_id = excluded.user_id,
+       p256dh = excluded.p256dh,
+       auth = excluded.auth`
   )
-    .bind(JSON.stringify(body.subscription), String(token.uid))
+    .bind(id, String(token.uid), endpoint, p256dh, auth)
     .run()
 
   return c.json({ ok: true })
 })
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(event: any, env: Env, ctx: any) {
+    console.log('cron triggered')
+  }
+}
