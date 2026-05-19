@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import webpush from 'web-push'
 import { cors } from 'hono/cors'
 import { getFirebaseToken, verifyFirebaseAuth } from '@hono/firebase-auth'
 import type { Env } from './env'
@@ -1205,5 +1206,84 @@ export default {
   fetch: app.fetch,
   async scheduled(event: any, env: Env, ctx: any) {
     console.log('cron triggered')
+    const nowMs = Date.now()
+    const kstHour = getLocalHourFromUtcMs(nowMs, 9)
+    
+    // 알림 발송 허용 시간: 09:00 ~ 01:00 (다음 날 오전 1시)
+    // 금지 시간: 02:00 ~ 08:00
+    if (kstHour >= 2 && kstHour <= 8) {
+      console.log(`[Cron] Skip notification for hour ${kstHour} (blocked time range)`)
+      return
+    }
+
+    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+      console.error('[Cron] Missing VAPID keys')
+      return
+    }
+
+    try {
+      webpush.setVapidDetails(
+        'mailto:no-reply@duoingsu.pages.dev',
+        env.VAPID_PUBLIC_KEY,
+        env.VAPID_PRIVATE_KEY
+      )
+    } catch (e) {
+      console.error('[Cron] Error setting vapid details', e)
+      return
+    }
+
+    const logicalDate = getNowKstLogicalDate(6)
+
+    const query = `
+      SELECT u.id, u.name 
+      FROM users u
+      WHERE NOT EXISTS (
+        SELECT 1 FROM time_logs t 
+        WHERE t.user_id = u.id AND t.logical_date = ? AND t.hour = ?
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM day_offs d
+        WHERE d.user_id = u.id AND d.logical_date = ?
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM schedules s
+        WHERE s.user_id = u.id AND s.logical_date = ? AND s.start_hour <= ? AND s.end_hour > ?
+      )
+    `
+    const targetUsers = await env.DB.prepare(query)
+      .bind(logicalDate, kstHour, logicalDate, logicalDate, kstHour, kstHour)
+      .all()
+      
+    if (!targetUsers.results || targetUsers.results.length === 0) return
+
+    for (const user of targetUsers.results) {
+      const subs = await env.DB.prepare(`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`)
+        .bind((user as any).id)
+        .all()
+      
+      if (!subs.results || subs.results.length === 0) continue
+
+      for (const sub of subs.results) {
+        try {
+          await webpush.sendNotification({
+            endpoint: sub.endpoint as string,
+            keys: {
+              p256dh: sub.p256dh as string,
+              auth: sub.auth as string
+            }
+          }, JSON.stringify({
+            title: '듀오잉수 기록 알림 💎',
+            body: `${kstHour}시의 기록을 아직 남기지 않았어요! 잊지 말고 기록해 주세요.`,
+            url: '/'
+          }))
+        } catch (e: any) {
+          if (e.statusCode === 410 || e.statusCode === 404) {
+             await env.DB.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`).bind(sub.endpoint as string).run()
+          } else {
+             console.error('[Cron] push error', e)
+          }
+        }
+      }
+    }
   }
 }

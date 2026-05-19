@@ -3,6 +3,7 @@ import type { User } from 'firebase/auth'
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import HomePage from './pages/HomePage'
+import DashboardPage from './pages/DashboardPage'
 import PlanPage from './pages/PlanPage'
 import ReflectionPage from './pages/ReflectionPage'
 import ResourcesPage from './pages/ResourcesPage'
@@ -73,6 +74,7 @@ export default function App() {
             <NavLink to="/" end>
               홈
             </NavLink>
+            <NavLink to="/dashboard">대시보드</NavLink>
             <NavLink to="/plan">플랜</NavLink>
             <NavLink to="/reflection">느낀 점</NavLink>
             <NavLink to="/resources">자료</NavLink>
@@ -159,6 +161,7 @@ export default function App() {
         ) : canUseApp ? (
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/reflection" element={<ReflectionPage />} />
             <Route path="/resources" element={<ResourcesPage />} />

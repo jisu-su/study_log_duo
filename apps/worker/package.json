@@ -8,10 +8,12 @@
   },
   "dependencies": {
     "@hono/firebase-auth": "1.4.2",
-    "hono": "4.12.14"
+    "hono": "4.12.14",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260420.1",
+    "@types/web-push": "^3.6.4",
     "typescript": "6.0.3",
     "wrangler": "4.83.0"
   }
