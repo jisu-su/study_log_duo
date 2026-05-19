@@ -47,6 +47,34 @@ type HomePayload = {
   schedules: Schedule[]
 }
 
+type StatLog = {
+  user_id: string
+  logical_date: string
+  hour: number
+  tag: string | null
+  focus_level: number | null
+}
+
+type StatDayOff = {
+  user_id: string
+  logical_date: string
+}
+
+type StatSchedule = {
+  user_id: string
+  logical_date: string
+  start_hour: number
+  end_hour: number
+}
+
+type StatsPayload = {
+  dates: string[]
+  users: HomeUser[]
+  logs: StatLog[]
+  dayOffs: StatDayOff[]
+  schedules: StatSchedule[]
+}
+
 function buildTimelineHours(dayStartHour = 6): number[] {
   const hours: number[] = []
   for (let h = dayStartHour; h <= 23; h++) hours.push(h)
@@ -61,6 +89,7 @@ export default function DashboardPage() {
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([])
   const [dayOffs, setDayOffs] = useState<DayOff[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [stats, setStats] = useState<StatsPayload | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -130,6 +159,9 @@ export default function DashboardPage() {
         `/api/plan-items?logicalDate=${encodeURIComponent(logicalDate)}`,
       )
       setItems(i.rows)
+
+      const s = await apiFetch<StatsPayload>(`/api/stats?logicalDate=${encodeURIComponent(logicalDate)}`)
+      setStats(s)
     } catch (e: any) {
       setError(e?.message ?? 'Failed to load dashboard data')
     } finally {
@@ -141,6 +173,77 @@ export default function DashboardPage() {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logicalDate, myUid])
+
+  function renderUserStats(userId: string | undefined) {
+    if (!stats || !userId || userId.startsWith('__placeholder')) {
+      return <div className="box muted" style={{ marginTop: 8 }}>데이터 대기 중...</div>
+    }
+    
+    let validHours = 0
+    let recordedHours = 0
+    let focusSum = 0
+    let focusCount = 0
+    const tagCounts: Record<string, number> = {}
+
+    const myLogs = stats.logs.filter((l) => l.user_id === userId)
+    const myDayOffs = new Set(stats.dayOffs.filter((d) => d.user_id === userId).map((d) => d.logical_date))
+    const mySchedules = stats.schedules.filter((s) => s.user_id === userId)
+
+    for (const date of stats.dates) {
+      if (myDayOffs.has(date)) continue
+      
+      const dateSchedules = mySchedules.filter((s) => s.logical_date === date)
+      
+      for (let h = 0; h < 24; h++) {
+        const isScheduled = dateSchedules.some((s) => s.start_hour <= h && s.end_hour > h)
+        if (isScheduled) continue
+        
+        validHours++
+        
+        const log = myLogs.find((l) => l.logical_date === date && l.hour === h)
+        if (log) {
+          recordedHours++
+          if (log.focus_level != null) {
+            focusSum += log.focus_level
+            focusCount++
+          }
+          if (log.tag) {
+            tagCounts[log.tag] = (tagCounts[log.tag] || 0) + 1
+          }
+        }
+      }
+    }
+
+    const rate = validHours > 0 ? Math.round((recordedHours / validHours) * 100) : 0
+    const avgFocus = focusCount > 0 ? (focusSum / focusCount).toFixed(1) : '-'
+    
+    const sortedTags = Object.entries(tagCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+
+    return (
+      <div className="box" style={{ marginTop: 8 }}>
+        <div className="boxRow">
+          <div className="boxKey">주간 기록률</div>
+          <div className="boxVal">
+            <strong>{rate}%</strong> <span className="muted" style={{ fontSize: 11 }}>({recordedHours}/{validHours}h)</span>
+          </div>
+        </div>
+        <div className="boxRow">
+          <div className="boxKey">평균 집중도</div>
+          <div className="boxVal">{avgFocus} <span className="muted" style={{ fontSize: 11 }}>/ 5.0</span></div>
+        </div>
+        <div className="boxRow">
+          <div className="boxKey">많이 쓴 태그</div>
+          <div className="boxVal">
+            {sortedTags.length > 0 
+              ? sortedTags.map(([t, c]) => `${t}(${c})`).join(', ') 
+              : '-'}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="stack">
@@ -164,7 +267,22 @@ export default function DashboardPage() {
       </div>
 
       <div className="card">
-        <h3>계획 vs 실적</h3>
+        <h3>주간 통계 <span className="muted" style={{ fontSize: 12, fontWeight: 'normal' }}>(최근 7일)</span></h3>
+        <div className="muted">휴무 및 약속 시간을 제외한 순수 기록률과 집중도를 보여줍니다.</div>
+        <div className="row" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 12, alignItems: 'flex-start' }}>
+          <div>
+            <UserColumnTitle user={displayUsers[0]} meUid={myUid} dayOff={undefined} />
+            {renderUserStats(displayUsers[0]?.id)}
+          </div>
+          <div>
+            <UserColumnTitle user={displayUsers[1]} meUid={myUid} dayOff={undefined} />
+            {renderUserStats(displayUsers[1]?.id)}
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>계획과 실행도</h3>
         <div className="muted">시간대별로 계획과 실제 홈 로그를 함께 확인할 수 있습니다.</div>
 
         <div className="compareGrid" style={{ marginTop: 12 }}>
@@ -197,8 +315,6 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
-      
-      {/* 추후 통계 섹션을 여기에 추가할 수 있습니다. */}
     </div>
   )
 }
@@ -274,7 +390,7 @@ function CompareCell(props: {
         <div className="compareVal">{planItem?.content || '-'}</div>
       </div>
       <div className="comparePair">
-        <div className="compareKey">실적</div>
+        <div className="compareKey">실행</div>
         <div className="compareVal">{timeLog?.content || '-'}</div>
       </div>
     </div>
@@ -285,9 +401,9 @@ function getCompareStatus(planItem: PlanItem | null, timeLog: TimeLog | null): {
   label: string
   className: string
 } {
-  if (planItem && timeLog) return { label: '계획/실적 있음', className: 'compareDone' }
-  if (planItem && !timeLog) return { label: '실적 대기', className: 'comparePlanned' }
-  if (!planItem && timeLog) return { label: '계획 외 실적', className: 'compareActualOnly' }
+  if (planItem && timeLog) return { label: '계획/실행 있음', className: 'compareDone' }
+  if (planItem && !timeLog) return { label: '실행 대기', className: 'comparePlanned' }
+  if (!planItem && timeLog) return { label: '계획 외 실행', className: 'compareActualOnly' }
   return { label: '비어 있음', className: 'compareEmpty' }
 }
 
