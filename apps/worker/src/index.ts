@@ -1176,6 +1176,54 @@ app.get('/api/resources/:id/file', async (c) => {
   headers.set('content-disposition', `attachment; filename="${String((row as any).title).replace(/"/g, '')}"`)
   return new Response(obj.body, { headers })
 })
+app.get('/api/stats', async (c) => {
+  const token = getFirebaseToken(c)
+  if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
+  
+  const targetDateStr = c.req.query('logicalDate') || getNowKstLogicalDate(6)
+  const targetTime = new Date(`${targetDateStr}T00:00:00Z`).getTime()
+  
+  const dObj = new Date(targetTime)
+  const dayOfWeek = dObj.getUTCDay()
+  const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  const mondayTime = targetTime - diffToMonday * 86400000
+  
+  const dates: string[] = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mondayTime + i * 86400000)
+    dates.push(d.toISOString().split('T')[0])
+  }
+  const minDate = dates[0]
+  const maxDate = dates[dates.length - 1]
+
+  const usersRes = await c.env.DB.prepare(`SELECT id, name, avatar_url FROM users`).all()
+
+  const logsRes = await c.env.DB.prepare(
+    `SELECT user_id, logical_date, hour, tag, focus_level 
+     FROM time_logs 
+     WHERE logical_date >= ? AND logical_date <= ?`
+  ).bind(minDate, maxDate).all()
+
+  const dayOffsRes = await c.env.DB.prepare(
+    `SELECT user_id, logical_date 
+     FROM day_offs 
+     WHERE logical_date >= ? AND logical_date <= ?`
+  ).bind(minDate, maxDate).all()
+
+  const schedulesRes = await c.env.DB.prepare(
+    `SELECT user_id, logical_date, start_hour, end_hour 
+     FROM schedules 
+     WHERE logical_date >= ? AND logical_date <= ?`
+  ).bind(minDate, maxDate).all()
+
+  return c.json({
+    dates,
+    users: usersRes.results,
+    logs: logsRes.results,
+    dayOffs: dayOffsRes.results,
+    schedules: schedulesRes.results
+  })
+})
 
 app.post('/api/notifications/subscribe', async (c) => {
   const token = getFirebaseToken(c)

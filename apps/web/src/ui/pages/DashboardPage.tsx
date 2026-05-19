@@ -178,7 +178,7 @@ export default function DashboardPage() {
     if (!stats || !userId || userId.startsWith('__placeholder')) {
       return <div className="box muted" style={{ marginTop: 8 }}>데이터 대기 중...</div>
     }
-    
+
     let validHours = 0
     let recordedHours = 0
     let focusSum = 0
@@ -191,15 +191,15 @@ export default function DashboardPage() {
 
     for (const date of stats.dates) {
       if (myDayOffs.has(date)) continue
-      
+
       const dateSchedules = mySchedules.filter((s) => s.logical_date === date)
-      
+
       for (let h = 0; h < 24; h++) {
         const isScheduled = dateSchedules.some((s) => s.start_hour <= h && s.end_hour > h)
         if (isScheduled) continue
-        
+
         validHours++
-        
+
         const log = myLogs.find((l) => l.logical_date === date && l.hour === h)
         if (log) {
           recordedHours++
@@ -216,7 +216,7 @@ export default function DashboardPage() {
 
     const rate = validHours > 0 ? Math.round((recordedHours / validHours) * 100) : 0
     const avgFocus = focusCount > 0 ? (focusSum / focusCount).toFixed(1) : '-'
-    
+
     const sortedTags = Object.entries(tagCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
@@ -236,8 +236,8 @@ export default function DashboardPage() {
         <div className="boxRow">
           <div className="boxKey">많이 쓴 태그</div>
           <div className="boxVal">
-            {sortedTags.length > 0 
-              ? sortedTags.map(([t, c]) => `${t}(${c})`).join(', ') 
+            {sortedTags.length > 0
+              ? sortedTags.map(([t, c]) => `${t}(${c})`).join(', ')
               : '-'}
           </div>
         </div>
@@ -267,7 +267,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="card">
-        <h3>주간 통계 <span className="muted" style={{ fontSize: 12, fontWeight: 'normal' }}>(최근 7일)</span></h3>
+        <h3>주간 통계 <span className="muted" style={{ fontSize: 12, fontWeight: 'normal' }}>(이번 주 · 월~일)</span></h3>
         <div className="muted">휴무 및 약속 시간을 제외한 순수 기록률과 집중도를 보여줍니다.</div>
         <div className="row" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 12, alignItems: 'flex-start' }}>
           <div>
