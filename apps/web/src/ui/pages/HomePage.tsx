@@ -252,11 +252,21 @@ export default function HomePage() {
 
         <div className="fishGrid" style={{ marginTop: 12 }}>
           <div className="fishHead fishLeft">
-            <UserColumnTitle user={displayUsers[0]} meUid={meUid} dayOff={dayOffByUser.get(displayUsers[0]?.id ?? '')} />
+            <UserColumnTitle
+              user={displayUsers[0]}
+              meUid={meUid}
+              dayOff={dayOffByUser.get(displayUsers[0]?.id ?? '')}
+              side="left"
+            />
           </div>
           <div className="fishHead fishMid">시간</div>
           <div className="fishHead fishRight">
-            <UserColumnTitle user={displayUsers[1]} meUid={meUid} dayOff={dayOffByUser.get(displayUsers[1]?.id ?? '')} />
+            <UserColumnTitle
+              user={displayUsers[1]}
+              meUid={meUid}
+              dayOff={dayOffByUser.get(displayUsers[1]?.id ?? '')}
+              side="right"
+            />
           </div>
 
           {timelineHours.map((h) => (
@@ -396,20 +406,23 @@ function UserColumnTitle(props: {
   user: HomeUser | undefined
   meUid: string | null
   dayOff: DayOff | undefined
+  side: 'left' | 'right'
 }) {
-  const { user, meUid, dayOff } = props
+  const { user, meUid, dayOff, side } = props
   if (!user) return <span>대기</span>
   const isPlaceholder = user.id.startsWith('__placeholder_')
   const name = isPlaceholder ? user.name : `${user.name}${user.id === meUid ? ' (나)' : ''}`
+  const offBadge = dayOff ? (
+    <span className="miniOffBadge">
+      휴무{dayOff.note ? ` · ${dayOff.note}` : ''}
+    </span>
+  ) : null
 
   return (
     <span className="columnTitle">
+      {side === 'left' ? offBadge : null}
       <span>{name}</span>
-      {dayOff ? (
-        <span className="miniOffBadge">
-          휴무{dayOff.note ? ` · ${dayOff.note}` : ''}
-        </span>
-      ) : null}
+      {side === 'right' ? offBadge : null}
     </span>
   )
 }
