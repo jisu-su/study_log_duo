@@ -338,35 +338,54 @@ export default function SettingsPage() {
 }
 
 async function subscribePush() {
-  if (!('serviceWorker' in navigator)) return alert('Service Worker를 지원하지 않는 브라우저야.')
+  if (!('serviceWorker' in navigator)) {
+    return alert('Service Worker를 지원하지 않는 브라우저입니다.')
+  }
   
   try {
+    await navigator.serviceWorker.register('/sw.js')
     const registration = await navigator.serviceWorker.ready
     const permission = await Notification.requestPermission()
     if (permission !== 'granted') {
-      alert('알림 권한이 거부되었어. 브라우저 설정에서 권한을 허용해줘.')
+      alert('알림 권한이 거부되었습니다. 브라우저 설정에서 알림 권한을 허용해주세요.')
       return
     }
 
     const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
     if (!vapidKey) {
-      alert('VITE_VAPID_PUBLIC_KEY 환경변수가 설정되지 않았어.')
+      alert('VITE_VAPID_PUBLIC_KEY 환경변수가 설정되지 않았습니다.')
       return
     }
 
-    const subscription = await registration.pushManager.subscribe({
+    let subscription = await registration.pushManager.getSubscription()
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: vapidKey
-    })
+        applicationServerKey: urlBase64ToArrayBuffer(vapidKey),
+      })
+    }
 
     await apiFetch('/api/notifications/subscribe', {
       method: 'POST',
       body: JSON.stringify({ subscription })
     })
 
-    alert('알림 구독이 완료되었어! 😊')
+    alert('알림 구독이 완료되었습니다.')
   } catch (e: any) {
     console.error('Push Subscribe Error:', e)
     alert(`구독 실패: ${e.message}`)
   }
+}
+
+function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+
+  return outputArray.buffer
 }

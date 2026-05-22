@@ -1255,7 +1255,7 @@ export default {
   async scheduled(event: any, env: Env, ctx: any) {
     console.log('cron triggered')
     const nowMs = Date.now()
-    const kstHour = getLocalHourFromUtcMs(nowMs, 9)
+    const kstHour = getLocalHourFromUtcMs(nowMs)
     
     // 알림 발송 허용 시간: 09:00 ~ 01:00 (다음 날 오전 1시)
     // 금지 시간: 02:00 ~ 08:00
