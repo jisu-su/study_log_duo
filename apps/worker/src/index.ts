@@ -550,6 +550,12 @@ app.put('/api/plans', async (c) => {
     picture: token.picture ? String(token.picture) : undefined,
   })
 
+  const existingPlan = await c.env.DB.prepare(
+    `SELECT id FROM plans WHERE user_id = ? AND logical_date = ?`,
+  )
+    .bind(String(token.uid), logicalDate)
+    .first()
+
   const id = crypto.randomUUID()
   const nowIso = new Date().toISOString()
 
@@ -564,6 +570,15 @@ app.put('/api/plans', async (c) => {
   )
     .bind(id, String(token.uid), logicalDate, condition, weather, goal, nowIso)
     .run()
+
+  if (!existingPlan) {
+    const actorName = await getUserDisplayName(c.env, String(token.uid))
+    await sendPushToOtherUsers(c.env, String(token.uid), {
+      title: '듀오잉수 플랜 알림',
+      body: `${actorName}님이 오늘의 하루 상태를 남겼습니다.`,
+      url: '/plan',
+    })
+  }
 
   return c.json({ ok: true })
 })
@@ -629,6 +644,13 @@ app.put('/api/plan-cheers', async (c) => {
   )
     .bind(id, planUserId, String(token.uid), logicalDate, content, nowIso)
     .run()
+
+  const actorName = await getUserDisplayName(c.env, String(token.uid))
+  await sendPushToUser(c.env, planUserId, {
+    title: '듀오잉수 응원 알림',
+    body: `${actorName}님이 내 하루 상태에 응원을 남겼습니다.`,
+    url: '/plan',
+  })
 
   return c.json({ ok: true })
 })
@@ -827,12 +849,12 @@ app.put('/api/reactions', async (c) => {
   if (!reflectionId) return c.json({ error: 'reflectionId is required' }, 400)
   if (!allowed.has(emoji)) return c.json({ error: 'Invalid emoji' }, 400)
 
-  const exists = await c.env.DB.prepare(
-    `SELECT id FROM reflections WHERE id = ?`,
+  const reflection = await c.env.DB.prepare(
+    `SELECT id, user_id FROM reflections WHERE id = ?`,
   )
     .bind(reflectionId)
     .first()
-  if (!exists) return c.json({ error: 'Reflection not found' }, 404)
+  if (!reflection) return c.json({ error: 'Reflection not found' }, 404)
 
   await ensureUser(c.env, {
     uid: String(token.uid),
@@ -861,6 +883,16 @@ app.put('/api/reactions', async (c) => {
   )
     .bind(crypto.randomUUID(), reflectionId, String(token.uid), emoji)
     .run()
+
+  const reflectionOwnerId = String((reflection as any).user_id)
+  if (reflectionOwnerId !== String(token.uid)) {
+    const actorName = await getUserDisplayName(c.env, String(token.uid))
+    await sendPushToUser(c.env, reflectionOwnerId, {
+      title: '듀오잉수 공감 알림',
+      body: `${actorName}님이 내 회고에 ${emoji} 공감을 남겼습니다.`,
+      url: '/reflection',
+    })
+  }
 
   return c.json({ ok: true, active: true })
 })
@@ -1249,6 +1281,81 @@ app.post('/api/notifications/subscribe', async (c) => {
 
   return c.json({ ok: true })
 })
+
+type PushPayload = {
+  title: string
+  body: string
+  url: string
+}
+
+async function getUserDisplayName(env: Env, userId: string): Promise<string> {
+  const row = await env.DB.prepare(`SELECT name FROM users WHERE id = ?`)
+    .bind(userId)
+    .first()
+  return String((row as any)?.name || '상대방')
+}
+
+function configureWebPush(env: Env): boolean {
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+    console.error('[Push] Missing VAPID keys')
+    return false
+  }
+
+  try {
+    webpush.setVapidDetails(
+      'mailto:no-reply@duoingsu.pages.dev',
+      env.VAPID_PUBLIC_KEY,
+      env.VAPID_PRIVATE_KEY,
+    )
+    return true
+  } catch (e) {
+    console.error('[Push] Error setting VAPID details', e)
+    return false
+  }
+}
+
+async function sendPushToOtherUsers(env: Env, actorUserId: string, payload: PushPayload) {
+  const users = await env.DB.prepare(`SELECT id FROM users WHERE id != ?`)
+    .bind(actorUserId)
+    .all()
+
+  for (const user of users.results ?? []) {
+    await sendPushToUser(env, String((user as any).id), payload)
+  }
+}
+
+async function sendPushToUser(env: Env, userId: string, payload: PushPayload) {
+  if (!configureWebPush(env)) return
+
+  const subs = await env.DB.prepare(
+    `SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`,
+  )
+    .bind(userId)
+    .all()
+
+  for (const sub of subs.results ?? []) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: String((sub as any).endpoint),
+          keys: {
+            p256dh: String((sub as any).p256dh),
+            auth: String((sub as any).auth),
+          },
+        },
+        JSON.stringify(payload),
+      )
+    } catch (e: any) {
+      if (e.statusCode === 410 || e.statusCode === 404) {
+        await env.DB.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`)
+          .bind(String((sub as any).endpoint))
+          .run()
+      } else {
+        console.error('[Push] send error', e)
+      }
+    }
+  }
+}
 
 export default {
   fetch: app.fetch,
