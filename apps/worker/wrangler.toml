@@ -30,4 +30,4 @@ binding = "R2"
 bucket_name = "studuo-resources"
 
 [triggers]
-crons = ["0 * * * *"]
+crons = ["0 * * * *", "10 * * * *"]

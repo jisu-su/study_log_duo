@@ -10,6 +10,39 @@ type AppBindings = { Bindings: Env }
 
 const BUILD_ID = '2026-04-23.1'
 
+const PUSH_MESSAGES = {
+  planFirstSaved: (actorName: string): PushPayload => ({
+    title: '듀오잉수 상태 알림',
+    body: `${actorName}님이 오늘의 하루 상태를 남겼습니다.`,
+    url: '/plan',
+  }),
+  planCheerSaved: (actorName: string): PushPayload => ({
+    title: '듀오잉수 응원 알림',
+    body: `${actorName}님이 내 하루 상태에 응원을 남겼습니다.`,
+    url: '/plan',
+  }),
+  reflectionReactionAdded: (actorName: string, emoji: string): PushPayload => ({
+    title: '듀오잉수 공감 알림',
+    body: `${actorName}님이 내 회고에 ${emoji} 공감을 남겼습니다.`,
+    url: '/reflection',
+  }),
+  missingDailyPlan: (): PushPayload => ({
+    title: '듀오잉수 플랜 알림',
+    body: '아직 오늘 계획된 플랜이 없습니다. 오늘 할 일을 먼저 적어주세요.',
+    url: '/plan',
+  }),
+  plannedHourStart: (hour: number, content: string): PushPayload => ({
+    title: '듀오잉수 실행 알림',
+    body: `${formatHour(hour)}시에 계획한 "${content}" 플랜이 있습니다. 이제 실행해볼 시간입니다.`,
+    url: '/',
+  }),
+  missingPlannedLog: (hour: number, content: string): PushPayload => ({
+    title: '듀오잉수 기록 알림',
+    body: `${formatHour(hour)}시에 계획한 "${content}" 실행 기록이 아직 없습니다. 홈에 짧게 남겨주세요.`,
+    url: '/',
+  }),
+}
+
 const app = new Hono<AppBindings>()
 
 app.onError((err, c) => {
@@ -573,11 +606,7 @@ app.put('/api/plans', async (c) => {
 
   if (!existingPlan) {
     const actorName = await getUserDisplayName(c.env, String(token.uid))
-    await sendPushToOtherUsers(c.env, String(token.uid), {
-      title: '듀오잉수 플랜 알림',
-      body: `${actorName}님이 오늘의 하루 상태를 남겼습니다.`,
-      url: '/plan',
-    })
+    await sendPushToOtherUsers(c.env, String(token.uid), PUSH_MESSAGES.planFirstSaved(actorName))
   }
 
   return c.json({ ok: true })
@@ -646,11 +675,7 @@ app.put('/api/plan-cheers', async (c) => {
     .run()
 
   const actorName = await getUserDisplayName(c.env, String(token.uid))
-  await sendPushToUser(c.env, planUserId, {
-    title: '듀오잉수 응원 알림',
-    body: `${actorName}님이 내 하루 상태에 응원을 남겼습니다.`,
-    url: '/plan',
-  })
+  await sendPushToUser(c.env, planUserId, PUSH_MESSAGES.planCheerSaved(actorName))
 
   return c.json({ ok: true })
 })
@@ -887,11 +912,11 @@ app.put('/api/reactions', async (c) => {
   const reflectionOwnerId = String((reflection as any).user_id)
   if (reflectionOwnerId !== String(token.uid)) {
     const actorName = await getUserDisplayName(c.env, String(token.uid))
-    await sendPushToUser(c.env, reflectionOwnerId, {
-      title: '듀오잉수 공감 알림',
-      body: `${actorName}님이 내 회고에 ${emoji} 공감을 남겼습니다.`,
-      url: '/reflection',
-    })
+    await sendPushToUser(
+      c.env,
+      reflectionOwnerId,
+      PUSH_MESSAGES.reflectionReactionAdded(actorName, emoji),
+    )
   }
 
   return c.json({ ok: true, active: true })
@@ -1357,88 +1382,130 @@ async function sendPushToUser(env: Env, userId: string, payload: PushPayload) {
   }
 }
 
+function formatHour(hour: number): string {
+  return String(hour).padStart(2, '0')
+}
+
+function getKstMinuteFromUtcMs(utcMs: number): number {
+  const localMs = utcMs + 9 * 60 * 60_000
+  return new Date(localMs).getUTCMinutes()
+}
+
+async function sendMissingDailyPlanNotifications(env: Env, logicalDate: string, hour: number) {
+  if (hour < 12) return
+
+  const users = await env.DB.prepare(
+    `SELECT u.id
+     FROM users u
+     WHERE NOT EXISTS (
+       SELECT 1 FROM day_offs d
+       WHERE d.user_id = u.id AND d.logical_date = ?
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM schedules s
+       WHERE s.user_id = u.id AND s.logical_date = ?
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM plan_items p
+       WHERE p.user_id = u.id AND p.logical_date = ?
+     )`,
+  )
+    .bind(logicalDate, logicalDate, logicalDate)
+    .all()
+
+  for (const user of users.results ?? []) {
+    await sendPushToUser(env, String((user as any).id), PUSH_MESSAGES.missingDailyPlan())
+  }
+}
+
+async function sendPlannedHourStartNotifications(env: Env, logicalDate: string, hour: number) {
+  const rows = await env.DB.prepare(
+    `SELECT p.user_id, p.content
+     FROM plan_items p
+     WHERE p.logical_date = ? AND p.hour = ?
+     AND NOT EXISTS (
+       SELECT 1 FROM day_offs d
+       WHERE d.user_id = p.user_id AND d.logical_date = p.logical_date
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM schedules s
+       WHERE s.user_id = p.user_id
+         AND s.logical_date = p.logical_date
+         AND s.start_hour <= ?
+         AND s.end_hour > ?
+     )`,
+  )
+    .bind(logicalDate, hour, hour, hour)
+    .all()
+
+  for (const row of rows.results ?? []) {
+    await sendPushToUser(
+      env,
+      String((row as any).user_id),
+      PUSH_MESSAGES.plannedHourStart(hour, String((row as any).content)),
+    )
+  }
+}
+
+async function sendMissingPlannedLogNotifications(env: Env, logicalDate: string, hour: number) {
+  const rows = await env.DB.prepare(
+    `SELECT p.user_id, p.content
+     FROM plan_items p
+     WHERE p.logical_date = ? AND p.hour = ?
+     AND NOT EXISTS (
+       SELECT 1 FROM time_logs t
+       WHERE t.user_id = p.user_id
+         AND t.logical_date = p.logical_date
+         AND t.hour = p.hour
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM day_offs d
+       WHERE d.user_id = p.user_id AND d.logical_date = p.logical_date
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM schedules s
+       WHERE s.user_id = p.user_id
+         AND s.logical_date = p.logical_date
+         AND s.start_hour <= ?
+         AND s.end_hour > ?
+     )`,
+  )
+    .bind(logicalDate, hour, hour, hour)
+    .all()
+
+  for (const row of rows.results ?? []) {
+    await sendPushToUser(
+      env,
+      String((row as any).user_id),
+      PUSH_MESSAGES.missingPlannedLog(hour, String((row as any).content)),
+    )
+  }
+}
+
 export default {
   fetch: app.fetch,
   async scheduled(event: any, env: Env, ctx: any) {
-    console.log('cron triggered')
     const nowMs = Date.now()
     const kstHour = getLocalHourFromUtcMs(nowMs)
-    
-    // 알림 발송 허용 시간: 09:00 ~ 01:00 (다음 날 오전 1시)
-    // 금지 시간: 02:00 ~ 08:00
+    const kstMinute = getKstMinuteFromUtcMs(nowMs)
+    const logicalDate = getNowKstLogicalDate(6)
+
+    console.log(`[Cron] triggered at ${formatHour(kstHour)}:${String(kstMinute).padStart(2, '0')} KST`)
+
     if (kstHour >= 2 && kstHour <= 8) {
       console.log(`[Cron] Skip notification for hour ${kstHour} (blocked time range)`)
       return
     }
 
-    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
-      console.error('[Cron] Missing VAPID keys')
+    if (kstMinute === 0) {
+      await sendMissingDailyPlanNotifications(env, logicalDate, kstHour)
+      await sendPlannedHourStartNotifications(env, logicalDate, kstHour)
       return
     }
 
-    try {
-      webpush.setVapidDetails(
-        'mailto:no-reply@duoingsu.pages.dev',
-        env.VAPID_PUBLIC_KEY,
-        env.VAPID_PRIVATE_KEY
-      )
-    } catch (e) {
-      console.error('[Cron] Error setting vapid details', e)
-      return
+    if (kstMinute === 10) {
+      const targetHour = (kstHour + 23) % 24
+      await sendMissingPlannedLogNotifications(env, logicalDate, targetHour)
     }
-
-    const logicalDate = getNowKstLogicalDate(6)
-
-    const query = `
-      SELECT u.id, u.name 
-      FROM users u
-      WHERE NOT EXISTS (
-        SELECT 1 FROM time_logs t 
-        WHERE t.user_id = u.id AND t.logical_date = ? AND t.hour = ?
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM day_offs d
-        WHERE d.user_id = u.id AND d.logical_date = ?
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM schedules s
-        WHERE s.user_id = u.id AND s.logical_date = ? AND s.start_hour <= ? AND s.end_hour > ?
-      )
-    `
-    const targetUsers = await env.DB.prepare(query)
-      .bind(logicalDate, kstHour, logicalDate, logicalDate, kstHour, kstHour)
-      .all()
-      
-    if (!targetUsers.results || targetUsers.results.length === 0) return
-
-    for (const user of targetUsers.results) {
-      const subs = await env.DB.prepare(`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`)
-        .bind((user as any).id)
-        .all()
-      
-      if (!subs.results || subs.results.length === 0) continue
-
-      for (const sub of subs.results) {
-        try {
-          await webpush.sendNotification({
-            endpoint: sub.endpoint as string,
-            keys: {
-              p256dh: sub.p256dh as string,
-              auth: sub.auth as string
-            }
-          }, JSON.stringify({
-            title: '듀오잉수 기록 알림 💎',
-            body: `${kstHour}시의 기록을 아직 남기지 않았어요! 잊지 말고 기록해 주세요.`,
-            url: '/'
-          }))
-        } catch (e: any) {
-          if (e.statusCode === 410 || e.statusCode === 404) {
-             await env.DB.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`).bind(sub.endpoint as string).run()
-          } else {
-             console.error('[Cron] push error', e)
-          }
-        }
-      }
-    }
-  }
+  },
 }
