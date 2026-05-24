@@ -215,7 +215,7 @@ export default function ReflectionPage() {
           </label>
 
           <label className="label">
-            자유 회고 (마크다운은 다음 단계에서)
+            자유 회고
             <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={7} />
           </label>
 
