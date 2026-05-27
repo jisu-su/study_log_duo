@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth'
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api'
+import { apiFetch, type MeUser } from '../../api'
 import { auth, isFirebaseConfigured } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 import Modal from '../shared/Modal'
@@ -55,8 +55,8 @@ function shiftIsoDate(isoDate: string, days: number): string {
   return new Date(ms).toISOString().slice(0, 10)
 }
 
-export default function HomePage() {
-  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
+export default function HomePage({ me }: { me: MeUser }) {
+  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(me.day_start_hour))
   const [users, setUsers] = useState<HomeUser[]>([])
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([])
   const [dayOffs, setDayOffs] = useState<DayOff[]>([])
@@ -72,7 +72,7 @@ export default function HomePage() {
   const [editFocus, setEditFocus] = useState<number>(2)
   const [editHadLog, setEditHadLog] = useState(false)
 
-  const timelineHours = useMemo(() => buildTimelineHours(6), [])
+  const timelineHours = useMemo(() => buildTimelineHours(me.day_start_hour), [me.day_start_hour])
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return
@@ -87,7 +87,6 @@ export default function HomePage() {
     setLoading(true)
     setError(null)
     try {
-      await apiFetch<{ user: any }>('/api/me')
       const data = await apiFetch<HomePayload>(
         `/api/home?logicalDate=${encodeURIComponent(logicalDate)}`,
       )
@@ -217,7 +216,7 @@ export default function HomePage() {
             </label>
             <button
               className="btnSecondary"
-              onClick={() => setLogicalDate(getNowKstLogicalDate(6))}
+              onClick={() => setLogicalDate(getNowKstLogicalDate(me.day_start_hour))}
               disabled={loading}
             >
               오늘

@@ -15,7 +15,8 @@ export async function ensureUser(env: Env, token: FirebaseToken) {
      VALUES (?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        email = excluded.email,
-       avatar_url = excluded.avatar_url`,
+       avatar_url = excluded.avatar_url
+     WHERE email != excluded.email OR avatar_url IS NOT excluded.avatar_url`,
   )
     .bind(token.uid, token.email, name, token.picture ?? null)
     .run()

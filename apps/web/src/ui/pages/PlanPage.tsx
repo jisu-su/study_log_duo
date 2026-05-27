@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api'
+import { apiFetch, type MeUser } from '../../api'
 import { auth } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 import Modal from '../shared/Modal'
@@ -83,8 +83,8 @@ function buildTimelineHours(dayStartHour = 6): number[] {
   return hours
 }
 
-export default function PlanPage() {
-  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
+export default function PlanPage({ me }: { me: MeUser }) {
+  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(me.day_start_hour))
   const [users, setUsers] = useState<HomeUser[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [items, setItems] = useState<PlanItem[]>([])
@@ -115,7 +115,7 @@ export default function PlanPage() {
     return base.slice(0, 2)
   }, [users])
 
-  const timelineHours = useMemo(() => buildTimelineHours(6), [])
+  const timelineHours = useMemo(() => buildTimelineHours(me.day_start_hour), [me.day_start_hour])
 
   const dayOffByUser = useMemo(() => {
     const map = new Map<string, DayOff>()

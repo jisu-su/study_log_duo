@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch, getApiBaseUrl } from '../../api'
+import { apiFetch, getApiBaseUrl, type MeUser } from '../../api'
 import { auth } from '../../firebase'
 
 type ResourceRow = {
@@ -28,7 +28,7 @@ function parseTags(value: string | null): string[] {
   }
 }
 
-export default function ResourcesPage() {
+export default function ResourcesPage({ me }: { me: MeUser }) {
   const [rows, setRows] = useState<ResourceRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

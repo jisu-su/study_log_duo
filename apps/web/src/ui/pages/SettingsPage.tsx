@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api'
+import { apiFetch, type MeUser } from '../../api'
 import { auth } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 
@@ -25,8 +25,8 @@ function hourOptions() {
   return opts
 }
 
-export default function SettingsPage() {
-  const todayLogicalDate = getNowKstLogicalDate(6)
+export default function SettingsPage({ me }: { me: MeUser }) {
+  const todayLogicalDate = getNowKstLogicalDate(me.day_start_hour)
   const [dayOffDate, setDayOffDate] = useState(() => todayLogicalDate)
   const [scheduleDate, setScheduleDate] = useState(() => todayLogicalDate)
   const [dayOffRows, setDayOffRows] = useState<DayOffRow[]>([])

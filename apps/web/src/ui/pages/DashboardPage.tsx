@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api'
+import { apiFetch, type MeUser } from '../../api'
 import { auth } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 
@@ -82,8 +82,8 @@ function buildTimelineHours(dayStartHour = 6): number[] {
   return hours
 }
 
-export default function DashboardPage() {
-  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
+export default function DashboardPage({ me }: { me: MeUser }) {
+  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(me.day_start_hour))
   const [users, setUsers] = useState<HomeUser[]>([])
   const [items, setItems] = useState<PlanItem[]>([])
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([])
@@ -108,7 +108,7 @@ export default function DashboardPage() {
     return base.slice(0, 2)
   }, [users])
 
-  const timelineHours = useMemo(() => buildTimelineHours(6), [])
+  const timelineHours = useMemo(() => buildTimelineHours(me.day_start_hour), [me.day_start_hour])
 
   const dayOffByUser = useMemo(() => {
     const map = new Map<string, DayOff>()
@@ -231,7 +231,7 @@ export default function DashboardPage() {
         </div>
         <div className="boxRow">
           <div className="boxKey">평균 집중도</div>
-          <div className="boxVal">{avgFocus} <span className="muted" style={{ fontSize: 11 }}>/ 5.0</span></div>
+          <div className="boxVal">{avgFocus} <span className="muted" style={{ fontSize: 11 }}>/ 3.0</span></div>
         </div>
         <div className="boxRow">
           <div className="boxKey">많이 쓴 태그</div>
