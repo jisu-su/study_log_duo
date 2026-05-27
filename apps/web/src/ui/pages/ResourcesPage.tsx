@@ -28,7 +28,7 @@ function parseTags(value: string | null): string[] {
   }
 }
 
-export default function ResourcesPage({ me }: { me: MeUser }) {
+export default function ResourcesPage() {
   const [rows, setRows] = useState<ResourceRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

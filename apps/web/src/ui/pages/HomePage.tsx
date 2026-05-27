@@ -55,8 +55,8 @@ function shiftIsoDate(isoDate: string, days: number): string {
   return new Date(ms).toISOString().slice(0, 10)
 }
 
-export default function HomePage({ me }: { me: MeUser }) {
-  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(me.day_start_hour))
+export default function HomePage() {
+  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
   const [users, setUsers] = useState<HomeUser[]>([])
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([])
   const [dayOffs, setDayOffs] = useState<DayOff[]>([])
@@ -72,7 +72,7 @@ export default function HomePage({ me }: { me: MeUser }) {
   const [editFocus, setEditFocus] = useState<number>(2)
   const [editHadLog, setEditHadLog] = useState(false)
 
-  const timelineHours = useMemo(() => buildTimelineHours(me.day_start_hour), [me.day_start_hour])
+  const timelineHours = useMemo(() => buildTimelineHours(6), [])
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return
@@ -216,7 +216,7 @@ export default function HomePage({ me }: { me: MeUser }) {
             </label>
             <button
               className="btnSecondary"
-              onClick={() => setLogicalDate(getNowKstLogicalDate(me.day_start_hour))}
+              onClick={() => setLogicalDate(getNowKstLogicalDate(6))}
               disabled={loading}
             >
               오늘

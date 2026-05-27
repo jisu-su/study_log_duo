@@ -1236,13 +1236,8 @@ app.get('/api/resources/:id/file', async (c) => {
 app.get('/api/stats', async (c) => {
   const token = getFirebaseToken(c)
   if (!token?.uid || !token.email) return c.json({ error: 'Unauthorized' }, 401)
-
-  const user = await c.env.DB.prepare(`SELECT day_start_hour FROM users WHERE id = ?`)
-    .bind(String(token.uid))
-    .first()
-  const dayStartHour = (user as any)?.day_start_hour ?? 6
   
-  const targetDateStr = c.req.query('logicalDate') || getNowKstLogicalDate(dayStartHour)
+  const targetDateStr = c.req.query('logicalDate') || getNowKstLogicalDate(6)
   const targetTime = new Date(`${targetDateStr}T00:00:00Z`).getTime()
   
   const dObj = new Date(targetTime)

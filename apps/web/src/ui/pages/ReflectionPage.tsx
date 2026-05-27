@@ -33,8 +33,8 @@ type ReactionRow = {
   created_at: string
 }
 
-export default function ReflectionPage({ me }: { me: MeUser }) {
-  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(me.day_start_hour))
+export default function ReflectionPage() {
+  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
   const [reflections, setReflections] = useState<ReflectionRow[]>([])
   const [reactions, setReactions] = useState<ReactionRow[]>([])
   const [loading, setLoading] = useState(false)

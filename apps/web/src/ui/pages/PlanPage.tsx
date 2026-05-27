@@ -83,8 +83,8 @@ function buildTimelineHours(dayStartHour = 6): number[] {
   return hours
 }
 
-export default function PlanPage({ me }: { me: MeUser }) {
-  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(me.day_start_hour))
+export default function PlanPage() {
+  const [logicalDate, setLogicalDate] = useState(() => getNowKstLogicalDate(6))
   const [users, setUsers] = useState<HomeUser[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [items, setItems] = useState<PlanItem[]>([])
@@ -115,7 +115,7 @@ export default function PlanPage({ me }: { me: MeUser }) {
     return base.slice(0, 2)
   }, [users])
 
-  const timelineHours = useMemo(() => buildTimelineHours(me.day_start_hour), [me.day_start_hour])
+  const timelineHours = useMemo(() => buildTimelineHours(6), [])
 
   const dayOffByUser = useMemo(() => {
     const map = new Map<string, DayOff>()

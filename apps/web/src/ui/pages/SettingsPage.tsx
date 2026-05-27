@@ -25,8 +25,8 @@ function hourOptions() {
   return opts
 }
 
-export default function SettingsPage({ me }: { me: MeUser }) {
-  const todayLogicalDate = getNowKstLogicalDate(me.day_start_hour)
+export default function SettingsPage() {
+  const todayLogicalDate = getNowKstLogicalDate(6)
   const [dayOffDate, setDayOffDate] = useState(() => todayLogicalDate)
   const [scheduleDate, setScheduleDate] = useState(() => todayLogicalDate)
   const [dayOffRows, setDayOffRows] = useState<DayOffRow[]>([])

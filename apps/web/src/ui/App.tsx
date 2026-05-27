@@ -160,12 +160,12 @@ export default function App() {
           </div>
         ) : canUseApp && me ? (
           <Routes>
-            <Route path="/" element={<HomePage me={me} />} />
-            <Route path="/dashboard" element={<DashboardPage me={me} />} />
-            <Route path="/plan" element={<PlanPage me={me} />} />
-            <Route path="/reflection" element={<ReflectionPage me={me} />} />
-            <Route path="/resources" element={<ResourcesPage me={me} />} />
-            <Route path="/settings" element={<SettingsPage me={me} />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/plan" element={<PlanPage />} />
+            <Route path="/reflection" element={<ReflectionPage />} />
+            <Route path="/resources" element={<ResourcesPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         ) : null}
       </main>
