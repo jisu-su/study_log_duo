@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth'
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api'
+import { apiFetch, type MeUser } from '../../api'
 import { auth, isFirebaseConfigured } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 import Modal from '../shared/Modal'
@@ -87,7 +87,6 @@ export default function HomePage() {
     setLoading(true)
     setError(null)
     try {
-      await apiFetch<{ user: any }>('/api/me')
       const data = await apiFetch<HomePayload>(
         `/api/home?logicalDate=${encodeURIComponent(logicalDate)}`,
       )

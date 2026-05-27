@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api'
+import { apiFetch, type MeUser } from '../../api'
 import { auth } from '../../firebase'
 import { getNowKstLogicalDate } from '../../../../../shared/datetime'
 

@@ -158,7 +158,7 @@ export default function App() {
               </button>
             </div>
           </div>
-        ) : canUseApp ? (
+        ) : canUseApp && me ? (
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
